@@ -49,6 +49,7 @@ class MLP:
             raise RuntimeError("Must specify an activation function for each layer" + \
                                  " (excluding input layer). Use None for default.")    
 
+        # By default, do not apply dropout to any layer
         if dropouts is None:
             dropouts = [False]*(len(sizes)-1)
 
@@ -56,19 +57,30 @@ class MLP:
             raise RuntimeError("Must specify whether to apply dropout to each layer" + \
                                 " (excluding output layer). Use None for default.")
 
+        # Input and output layers are sometimes special cases, keep them separate
         nIn = sizes[0]
         hiddenSizes = sizes[1:-2]
         nOut = sizes[-1]
 
+        # No activations on the inputs, here we separate the output layer's activation
         hiddenActivations = activations[:-2]
         outActivation = activations[-1]
 
+        # Define the layers
         self.inLayer = InputLayer(nIn, dropouts[0])
         self.__makeHiddenLayers__(hiddenSizes, hiddenActivations, dropouts[1:])
         self.outLayer = FullConnectLayer(self.hiddens[-1], nOut, outActivation, False)
 
+
     def __makeHiddenLayers__(self, hiddenSizes, hiddenActivations, dropouts):
-        
+        """Build a list of hidden layers.
+    
+        hiddenSizes -- a list of the number of nodes in each layer
+        hiddenActivations -- a list of tensorflow defined activation functions for each layer
+        dropouts -- a list of booleans, True when dropout is to be applied to that layer
+
+        """
+
         hiddens = []
         inputs = self.inLayer
         for nNodes,activation,dropout in zip(hiddenSizes, hiddenActivations, dropouts):
@@ -79,9 +91,17 @@ class MLP:
 
 
     def forward(self, sess, x, keepProb=1):        
+        """Do a forward pass through the network and return the result.
 
+        x -- The input data
+        keepProb -- For layers with dropout, the probability of keeping each node
+
+        """
+
+
+        # Define the feed_dict for a forward pass
         feedDict = {self.inLayer.activations:x}
-        
+        # For each layer with dropout, add its keepProb to feed_dict
         possibleDropoutLayers = [self.inLayer]
         possibleDropoutLayers.extend(self.hiddens)
         for layer in possibleDropoutLayers:
@@ -106,4 +126,3 @@ net = MLP([10,20,30,10,11,2], activations, dropouts)
 sess.run(tf.initialize_all_variables())
 
 print net.forward(sess, np.ones([5,10]), 0.5)
-
