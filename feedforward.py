@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+from tensorflow.examples.tutorials.mnist import input_data
 
 class Layer:
 
@@ -15,7 +16,7 @@ class Layer:
 
 class InputLayer(Layer):
     
-    def __init__(self, nFeatures, dropout=None):
+    def __init__(self, nFeatures, dropout=False):
         shape = [None, nFeatures]
         activations = tf.placeholder(tf.float32, shape=shape)
        
@@ -24,7 +25,7 @@ class InputLayer(Layer):
 
 class FullConnectLayer(Layer):
 
-    def __init__(self, inLayer, nNodes, activationFunction, dropout):
+    def __init__(self, inLayer, nNodes, activationFunction, dropout=False):
         
         shape = [inLayer.shape[1], nNodes]
         self.weights = tf.Variable(tf.random_normal(shape, stddev=0.1 ))
@@ -34,6 +35,37 @@ class FullConnectLayer(Layer):
         activations = activationFunction(weightedInput)
         
         Layer.__init__(self, shape, activations, dropout)
+
+class ConvLayer(Layer):
+    
+    def __init__(self, inLayer, filterSize, strides, activationFunction, dropout=False):
+        self.weights = tf.Variable(tf.truncated_normal(filterSize, stddev=0.1))
+        self.biases = tf.Variable(tf.constant(0.1, shape=[filterSize[-1]]))
+
+        conv = tf.nn.conv2d(inLayer.activations, self.weights, strides, padding='SAME') + \
+            self.biases
+        activations = activationFunction(conv)
+
+        Layer.__init__(self, filterSize, activations, dropout)
+
+
+class PoolLayer(Layer):
+
+    def __init__(self, inLayer, poolSize, strides, dropout=False, poolType=tf.nn.max_pool):
+        
+        activations = poolType(inLayer.activations, ksize=poolSize, strides=strides, padding='SAME')
+
+        Layer.__init__(self, poolSize, activations, dropout)
+
+
+class ReshapeLayer(Layer):
+
+    def __init__(self, inLayer, newShape, dropout=False):
+        activations = tf.reshape(inLayer.activations, newShape);
+        
+        Layer.__init__(self, newShape, activations, dropout)
+
+
 
         
 class MLP:
@@ -98,7 +130,6 @@ class MLP:
 
         """
 
-
         # Define the feed_dict for a forward pass
         feedDict = {self.inLayer.activations:x}
         # For each layer with dropout, add its keepProb to feed_dict
@@ -126,3 +157,23 @@ net = MLP([10,20,30,10,11,2], activations, dropouts)
 sess.run(tf.initialize_all_variables())
 
 print net.forward(sess, np.ones([5,10]), 0.5)
+
+
+mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
+inputLayer = InputLayer(784)
+as2D = ReshapeLayer(inputLayer, [-1,28,28,1])
+conv1 = ConvLayer(as2D, [5,5,1,32], [1,1,1,1], tf.nn.relu)
+pool1 = PoolLayer(conv1, [1, 2, 2, 1], [1, 2, 2, 1])
+conv2 = ConvLayer(pool1, [5,5,32,64], [1,1,1,1], tf.nn.relu)
+pool2 = PoolLayer(conv2, [1, 2, 2, 1], [1, 2, 2, 1])
+flat = ReshapeLayer(pool2, [-1, 7*7*64])
+fc1 = FullConnectLayer(flat, 1024, tf.nn.relu, True)
+readout = FullConnectLayer(fc1, 10, tf.nn.softmax)
+
+sess.run(tf.initialize_all_variables())
+
+print sess.run(readout.activations, feed_dict={inputLayer.activations:mnist.train.next_batch(5)[0], fc1.keepProb:1})
+
+
+
+
