@@ -13,15 +13,38 @@ class Layer:
             self.keepProb = tf.placeholder(tf.float32) 
             self.activations = tf.nn.dropout(self.activations, self.keepProb)
 
+    @staticmethod
+    def __hasRequiredFields__(dictionaryKeys, requiredFields):
+
+        for field in requiredFields:
+            if field not in dictionaryKeys:
+                raise RuntimeError("Missing required key, " + field  + \
+                    ", in parameters dictionary")
+
 
 class InputLayer(Layer):
-    
+ 
     def __init__(self, nFeatures, dropout=False):
         shape = [None, nFeatures]
         activations = tf.placeholder(tf.float32, shape=shape)
        
         Layer.__init__(self, shape, activations, dropout)
 
+    @classmethod
+    def fromDictionary(cls, paramDic):
+
+        requiredFields = ["nFeatures"]
+        Layer.__hasRequiredFields__(paramDic.getKeys(), requiredFields)
+    
+        nFeatures = paramDic["nFeatures"]
+        
+        if "dropout" not in paramDic:
+            dropout = False
+        else:
+            dropout = paramDic["dropout"]
+
+        return cls(nFeatures, dropout)
+ 
 
 class FullConnectLayer(Layer):
 
@@ -36,9 +59,27 @@ class FullConnectLayer(Layer):
         
         Layer.__init__(self, shape, activations, dropout)
 
+    @classmethod
+    def fromDictionary(cls, paramDic):
+
+        requiredFields = ["inLayer", "nNodes", "activationFunction"]       
+        Layer.__hasRequiredFields__(paramDic.getKeys(), requiredFields)
+
+        inLayer = paramDic["inLayer"]
+        nNodes = paramDic["nNodes"]
+        activationFunction = paramDic["activationFunction"]
+        
+        if "dropout" not in paramDic:
+            dropout = False
+        else:
+            dropout = paramDic["dropout"]
+
+        return cls(inLayer, nNodes, activationFunction, dropout)
+
+
 class ConvLayer(Layer):
     
-    def __init__(self, inLayer, filterSize, strides, activationFunction, dropout=False):
+    def __init__(self, inLayer, activationFunction, filterSize, strides=[1,1,1,1], dropout=False):
         self.weights = tf.Variable(tf.truncated_normal(filterSize, stddev=0.1))
         self.biases = tf.Variable(tf.constant(0.1, shape=[filterSize[-1]]))
 
@@ -48,7 +89,28 @@ class ConvLayer(Layer):
 
         Layer.__init__(self, filterSize, activations, dropout)
 
+    @classmethod
+    def fromDictionary(cls, paramDic):
 
+        requiredFields = ["inLayer", "activationFunction", "filterSize"]       
+        Layer.__hasRequiredFields__(paramDic.getKeys(), requiredFields)
+        
+        inLayer = paramDic["inLayer"]
+        activationFunction = paramDic["activationFunction"]
+        filterSize = paramDic["filterSize"]
+       
+        if "strides" not in paramDic:
+            strides = [1,1,1,1]
+        else:
+            strides = paramDic["strides"]
+        if "dropout" not in paramDic:
+            dropout = False
+        else:
+            dropout = paramDic["dropout"]
+
+        return cls(inLayer, activationFunction, filterSize, strides, dropout)
+       
+        
 class PoolLayer(Layer):
 
     def __init__(self, inLayer, poolSize, strides, dropout=False, poolType=tf.nn.max_pool):
@@ -56,6 +118,30 @@ class PoolLayer(Layer):
         activations = poolType(inLayer.activations, ksize=poolSize, strides=strides, padding='SAME')
 
         Layer.__init__(self, poolSize, activations, dropout)
+
+    @classmethod
+    def fromDictionary(cls, paramDic):
+
+        requiredFields = ["inLayer", "poolSize"]       
+        Layer.__hasRequiredFields__(paramDic.getKeys(), requiredFields)
+        
+        inLayer = paramDic["inLayer"]
+        poolSize = paramDic["poolSize"]
+       
+        if "strides" not in paramDic:
+            strides = paramDic["poolSize"]
+        else:
+            strides = paramDic["strides"] 
+        if "poolType" not in paramDic:
+            poolType = tf.nn.max_pool
+        else:
+            poolType = paramDic["poolType"]
+        if "dropout" not in paramDic:
+            dropout = False
+        else:
+            dropout = paramDic["dropout"]
+
+        return cls(inLayer, poolSize, strides, dropout, poolType)
 
 
 class ReshapeLayer(Layer):
@@ -65,9 +151,23 @@ class ReshapeLayer(Layer):
         
         Layer.__init__(self, newShape, activations, dropout)
 
+    @classmethod
+    def fromDictionary(cls, paramDic):
 
-
+        requiredFields = ["inLayer", "newShape"]       
+        Layer.__hasRequiredFields__(paramDic.getKeys(), requiredFields)
         
+        inLayer = paramDic["inLayer"]
+        newShape = paramDic["newShape"]
+     
+        if "dropout" not in paramDic:
+            dropout = False
+        else:
+            dropout = paramDic["dropout"]
+
+        return cls(inLayer, poolSize, strides, dropout, poolType)
+        
+
 class MLP:
 
     def __init__(self, sizes, activations=None, dropouts=None):
@@ -150,7 +250,7 @@ sess = tf.InteractiveSession()
 hActivation = tf.nn.relu
 outActivation = tf.nn.softmax
 
-activations = [hActivation, hActivation, hActivation , hActivation, outActivation]
+activations = (4*[hActivation]).append(outActivation)
 dropouts = [True, False, False, True, True]
 
 net = MLP([10,20,30,10,11,2], activations, dropouts)
@@ -158,13 +258,13 @@ sess.run(tf.initialize_all_variables())
 
 print net.forward(sess, np.ones([5,10]), 0.5)
 
-
 mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
+
 inputLayer = InputLayer(784)
 as2D = ReshapeLayer(inputLayer, [-1,28,28,1])
-conv1 = ConvLayer(as2D, [5,5,1,32], [1,1,1,1], tf.nn.relu)
+conv1 = ConvLayer(as2D, tf.nn.relu, [5,5,1,32])
 pool1 = PoolLayer(conv1, [1, 2, 2, 1], [1, 2, 2, 1])
-conv2 = ConvLayer(pool1, [5,5,32,64], [1,1,1,1], tf.nn.relu)
+conv2 = ConvLayer(pool1, tf.nn.relu, [5,5,32,64])
 pool2 = PoolLayer(conv2, [1, 2, 2, 1], [1, 2, 2, 1])
 flat = ReshapeLayer(pool2, [-1, 7*7*64])
 fc1 = FullConnectLayer(flat, 1024, tf.nn.relu, True)
@@ -174,6 +274,22 @@ sess.run(tf.initialize_all_variables())
 
 print sess.run(readout.activations, feed_dict={inputLayer.activations:mnist.train.next_batch(5)[0], fc1.keepProb:1})
 
+"""
+Example of possible general network definition
 
-
-
+Network([[InputLayer,{         "nFeatures" : 784 }], \
+    [ReshapeLayer,{             "newShape" : [-1, 28, 28, 1] }], \
+    [ConvLayer,{              "filterSize" : [5,5,32], \
+                     "activationFunction" : tf.nn.relu }], \
+    [PoolLayer,{                "poolSize" : [1, 2, 2, 1] }], \
+    [ConvLayer,{              "filterSize" : [5,5,64], \
+                     "activationFunction" : tf.nn.relu }], \
+    [PoolLayer,{                "poolSize" : [1, 2, 2, 1] }], \
+    [ReshapeLayer,{             "newShape" : [-1, 7*7*64] }], \
+    [FullConnectLayer,{           "nNodes" : 1024, 
+                     "activationFunction" : tf.nn.relu, \
+                                "dropout" : True }], \
+    [FullConnectLayer,{           "nNodes" : 10, \
+                     "activationFunction" : tf.nn.softmax }]
+    ])
+"""
