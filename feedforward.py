@@ -21,7 +21,6 @@ class Layer:
                 raise RuntimeError("Missing required key, " + field  + \
                     ", in parameters dictionary")
 
-
 class InputLayer(Layer):
  
     def __init__(self, nFeatures, dropout=False):
@@ -34,7 +33,7 @@ class InputLayer(Layer):
     def fromDictionary(cls, paramDic):
 
         requiredFields = ["nFeatures"]
-        Layer.__hasRequiredFields__(paramDic.getKeys(), requiredFields)
+        Layer.__hasRequiredFields__(paramDic.keys(), requiredFields)
     
         nFeatures = paramDic["nFeatures"]
         
@@ -63,7 +62,7 @@ class FullConnectLayer(Layer):
     def fromDictionary(cls, paramDic):
 
         requiredFields = ["inLayer", "nNodes", "activationFunction"]       
-        Layer.__hasRequiredFields__(paramDic.getKeys(), requiredFields)
+        Layer.__hasRequiredFields__(paramDic.keys(), requiredFields)
 
         inLayer = paramDic["inLayer"]
         nNodes = paramDic["nNodes"]
@@ -80,20 +79,21 @@ class FullConnectLayer(Layer):
 class ConvLayer(Layer):
     
     def __init__(self, inLayer, activationFunction, filterSize, strides=[1,1,1,1], dropout=False):
+
         self.weights = tf.Variable(tf.truncated_normal(filterSize, stddev=0.1))
         self.biases = tf.Variable(tf.constant(0.1, shape=[filterSize[-1]]))
 
         conv = tf.nn.conv2d(inLayer.activations, self.weights, strides, padding='SAME') + \
             self.biases
         activations = activationFunction(conv)
-
+     
         Layer.__init__(self, filterSize, activations, dropout)
 
     @classmethod
     def fromDictionary(cls, paramDic):
 
         requiredFields = ["inLayer", "activationFunction", "filterSize"]       
-        Layer.__hasRequiredFields__(paramDic.getKeys(), requiredFields)
+        Layer.__hasRequiredFields__(paramDic.keys(), requiredFields)
         
         inLayer = paramDic["inLayer"]
         activationFunction = paramDic["activationFunction"]
@@ -123,7 +123,7 @@ class PoolLayer(Layer):
     def fromDictionary(cls, paramDic):
 
         requiredFields = ["inLayer", "poolSize"]       
-        Layer.__hasRequiredFields__(paramDic.getKeys(), requiredFields)
+        Layer.__hasRequiredFields__(paramDic.keys(), requiredFields)
         
         inLayer = paramDic["inLayer"]
         poolSize = paramDic["poolSize"]
@@ -155,7 +155,7 @@ class ReshapeLayer(Layer):
     def fromDictionary(cls, paramDic):
 
         requiredFields = ["inLayer", "newShape"]       
-        Layer.__hasRequiredFields__(paramDic.getKeys(), requiredFields)
+        Layer.__hasRequiredFields__(paramDic.keys(), requiredFields)
         
         inLayer = paramDic["inLayer"]
         newShape = paramDic["newShape"]
@@ -165,10 +165,10 @@ class ReshapeLayer(Layer):
         else:
             dropout = paramDic["dropout"]
 
-        return cls(inLayer, poolSize, strides, dropout, poolType)
+        return cls(inLayer, newShape,dropout)
         
 
-class MLP:
+class MLP():
 
     def __init__(self, sizes, activations=None, dropouts=None):
 
@@ -188,6 +188,7 @@ class MLP:
         if len(dropouts) != len(sizes)-1:
             raise RuntimeError("Must specify whether to apply dropout to each layer" + \
                                 " (excluding output layer). Use None for default.")
+
 
         # Input and output layers are sometimes special cases, keep them separate
         nIn = sizes[0]
@@ -242,6 +243,48 @@ class MLP:
         return sess.run(self.outLayer.activations, feed_dict=feedDict)        
 
 
+class Network:
+
+    def __init__(self, layerList):
+        """
+        layerList - list of tuples, each being a Layer class and a dictionary of init parameters
+        """
+
+        if len(layerList) < 3:
+            raise RuntimeError('Networks with less than 3 layers not currently supported')
+        
+        inClass, inDictionary = layerList[0]
+        self.inLayer = inClass.fromDictionary(inDictionary)
+
+        self.layers = [self.inLayer]
+        for layer in layerList[1:]:
+            layerClass, layerDictionary = layer
+            layerDictionary["inLayer"] = self.layers[-1]
+             
+            self.layers.append(layerClass.fromDictionary(layerDictionary))
+            
+        self.hiddens = self.layers[1:-1]
+        self.outLayer = self.layers[-1]
+        
+    def forward(self, sess, x, keepProb=1):
+        """Do a forward pass through the network and return the result.
+
+        x -- The input data
+        keepProb -- For layers with dropout, the probability of keeping each node
+
+        """
+
+        # Define the feed_dict for a forward pass
+        feedDict = {self.inLayer.activations:x}
+        # For each layer with dropout, add its keepProb to feed_dict
+        possibleDropoutLayers = [self.inLayer]
+        possibleDropoutLayers.extend(self.hiddens)
+        for layer in possibleDropoutLayers:
+            if layer.applyDropout:
+                feedDict[layer.keepProb] = keepProb
+
+        return sess.run(self.outLayer.activations, feed_dict=feedDict)        
+
 #in h1 h2 h3 ou
 #d1 d2 d3 d4 
 #   a1 a2 a3 a4
@@ -274,22 +317,25 @@ sess.run(tf.initialize_all_variables())
 
 print sess.run(readout.activations, feed_dict={inputLayer.activations:mnist.train.next_batch(5)[0], fc1.keepProb:1})
 
-"""
-Example of possible general network definition
 
-Network([[InputLayer,{         "nFeatures" : 784 }], \
-    [ReshapeLayer,{             "newShape" : [-1, 28, 28, 1] }], \
-    [ConvLayer,{              "filterSize" : [5,5,32], \
-                     "activationFunction" : tf.nn.relu }], \
-    [PoolLayer,{                "poolSize" : [1, 2, 2, 1] }], \
-    [ConvLayer,{              "filterSize" : [5,5,64], \
-                     "activationFunction" : tf.nn.relu }], \
-    [PoolLayer,{                "poolSize" : [1, 2, 2, 1] }], \
-    [ReshapeLayer,{             "newShape" : [-1, 7*7*64] }], \
-    [FullConnectLayer,{           "nNodes" : 1024, 
-                     "activationFunction" : tf.nn.relu, \
-                                "dropout" : True }], \
-    [FullConnectLayer,{           "nNodes" : 10, \
-                     "activationFunction" : tf.nn.softmax }]
-    ])
-"""
+#Example of possible general network definition
+
+network = Network([[InputLayer,{         "nFeatures" : 784 }], \
+              [ReshapeLayer,{             "newShape" : [-1, 28, 28, 1] }], \
+              [ConvLayer,{              "filterSize" : [5,5,1,32], \
+                                "activationFunction" : tf.nn.relu }], \
+              [PoolLayer,{                "poolSize" : [1, 2, 2, 1] }], \
+              [ConvLayer,{              "filterSize" : [5,5,32,64], \
+                                "activationFunction" : tf.nn.relu }], \
+              [PoolLayer,{                "poolSize" : [1, 2, 2, 1] }], \
+              [ReshapeLayer,{             "newShape" : [-1, 7*7*64] }], \
+              [FullConnectLayer,{           "nNodes" : 1024, 
+                                "activationFunction" : tf.nn.relu, \
+                                           "dropout" : True }], \
+              [FullConnectLayer,{           "nNodes" : 10, \
+                                "activationFunction" : tf.nn.softmax }]
+              ])
+
+sess.run(tf.initialize_all_variables())
+print network.forward(sess, mnist.train.next_batch(5)[0], float(0.9))
+
