@@ -5,6 +5,11 @@ from tensorflow.examples.tutorials.mnist import input_data
 class Layer:
 
     def __init__(self, shape, activations, dropout=False):
+        """
+        shape -- the shape of the weights on this layer
+        activations -- the output values of this layer, may be a tf.placeholder or tensor
+        dropout -- whether or not dropout is to be applied to this layer
+        """
         self.shape = shape
         self.activations = activations
         self.applyDropout = dropout       
@@ -15,11 +20,17 @@ class Layer:
 
     @staticmethod
     def __hasRequiredFields__(dictionaryKeys, requiredFields):
+        """Used by subclasses to ensure that parameter-value dictionaries have necessary values
+       
+        dictionaryKeys -- keys that exist in a dictionary
+        requiredFields -- keys that are expected to exist in the dictionary
+        """
 
         for field in requiredFields:
             if field not in dictionaryKeys:
                 raise RuntimeError("Missing required key, " + field  + \
                     ", in parameters dictionary")
+
 
 class InputLayer(Layer):
  
@@ -214,6 +225,11 @@ class Network:
 class MLP(Network):
 
     def __init__(self, sizes, activations=None, dropouts=None):
+        """
+        sizes -- list: number of nodes in each layer, including input features and readout layer
+        activations -- list: activation function for each layer (excluding input layer)
+        dropouts -- list: boolean, whether or not to apply dropout for each layer (excluding input)
+        """
 
         # Default activations are ReLu for hidden, softmax for output
         if activations is None:
