@@ -166,81 +166,6 @@ class ReshapeLayer(Layer):
             dropout = paramDic["dropout"]
 
         return cls(inLayer, newShape,dropout)
-        
-
-class MLP():
-
-    def __init__(self, sizes, activations=None, dropouts=None):
-
-        # Default activations are ReLu for hidden, softmax for output
-        if activations is None:
-            activations = [tf.nn.relu]*(len(sizes)-2)
-            activations.append(tf.nn.softmax)
-
-        if len(activations) != len(sizes)-1:
-            raise RuntimeError("Must specify an activation function for each layer" + \
-                                 " (excluding input layer). Use None for default.")    
-
-        # By default, do not apply dropout to any layer
-        if dropouts is None:
-            dropouts = [False]*(len(sizes)-1)
-
-        if len(dropouts) != len(sizes)-1:
-            raise RuntimeError("Must specify whether to apply dropout to each layer" + \
-                                " (excluding output layer). Use None for default.")
-
-
-        # Input and output layers are sometimes special cases, keep them separate
-        nIn = sizes[0]
-        hiddenSizes = sizes[1:-2]
-        nOut = sizes[-1]
-
-        # No activations on the inputs, here we separate the output layer's activation
-        hiddenActivations = activations[:-2]
-        outActivation = activations[-1]
-
-        # Define the layers
-        self.inLayer = InputLayer(nIn, dropouts[0])
-        self.__makeHiddenLayers__(hiddenSizes, hiddenActivations, dropouts[1:])
-        self.outLayer = FullConnectLayer(self.hiddens[-1], nOut, outActivation, False)
-
-
-    def __makeHiddenLayers__(self, hiddenSizes, hiddenActivations, dropouts):
-        """Build a list of hidden layers.
-    
-        hiddenSizes -- a list of the number of nodes in each layer
-        hiddenActivations -- a list of tensorflow defined activation functions for each layer
-        dropouts -- a list of booleans, True when dropout is to be applied to that layer
-
-        """
-
-        hiddens = []
-        inputs = self.inLayer
-        for nNodes,activation,dropout in zip(hiddenSizes, hiddenActivations, dropouts):
-            hiddens.append(FullConnectLayer(inputs, nNodes, activation, dropout))
-            inputs = hiddens[-1]          
-                    
-        self.hiddens = hiddens
-
-
-    def forward(self, sess, x, keepProb=1):        
-        """Do a forward pass through the network and return the result.
-
-        x -- The input data
-        keepProb -- For layers with dropout, the probability of keeping each node
-
-        """
-
-        # Define the feed_dict for a forward pass
-        feedDict = {self.inLayer.activations:x}
-        # For each layer with dropout, add its keepProb to feed_dict
-        possibleDropoutLayers = [self.inLayer]
-        possibleDropoutLayers.extend(self.hiddens)
-        for layer in possibleDropoutLayers:
-            if layer.applyDropout:
-                feedDict[layer.keepProb] = keepProb
-
-        return sess.run(self.outLayer.activations, feed_dict=feedDict)        
 
 
 class Network:
@@ -284,6 +209,53 @@ class Network:
                 feedDict[layer.keepProb] = keepProb
 
         return sess.run(self.outLayer.activations, feed_dict=feedDict)        
+        
+
+class MLP(Network):
+
+    def __init__(self, sizes, activations=None, dropouts=None):
+
+        # Default activations are ReLu for hidden, softmax for output
+        if activations is None:
+            activations = [tf.nn.relu]*(len(sizes)-2)
+            activations.append(tf.nn.softmax)
+
+        if len(activations) != len(sizes)-1:
+            raise RuntimeError("Must specify an activation function for each layer" + \
+                                 " (excluding input layer). Use None for default.")    
+
+        # By default, do not apply dropout to any layer
+        if dropouts is None:
+            dropouts = [False]*(len(sizes)-1)
+
+        if len(dropouts) != len(sizes)-1:
+            raise RuntimeError("Must specify whether to apply dropout to each layer" + \
+                                " (excluding output layer). Use None for default.")
+
+
+        # Input and output layers are sometimes special cases, keep them separate
+        nIn = sizes[0]
+        hiddenSizes = sizes[1:-2]
+        nOut = sizes[-1]
+
+        # No activations on the inputs, here we separate the output layer's activation
+        hiddenActivations = activations[:-2]
+        outActivation = activations[-1]
+
+        # Define the layers as a list of tuples to be passed to Network constructor
+        initList = [[InputLayer, {"nFeatures" : nIn, "dropout" : dropouts[0]}]] 
+
+        for nNodes,activation,dropout in zip(hiddenSizes, hiddenActivations, dropouts[1:]):
+            initList.append([FullConnectLayer, { "nNodes" : nNodes,\
+                                     "activationFunction" : activation,\
+                                                "dropout" : dropout}])
+
+        initList.append([FullConnectLayer, { "nNodes" : nOut,\
+                                 "activationFunction" : outActivation}])
+
+        Network.__init__(self, initList)
+
+
 
 #in h1 h2 h3 ou
 #d1 d2 d3 d4 
