@@ -31,6 +31,13 @@ class Layer:
                 raise RuntimeError("Missing required key, " + field  + \
                     ", in parameters dictionary")
 
+    @staticmethod
+    def __addDefaultsToDict__(initDictionary, specificLayerDefaults={}):
+        
+        globalLayerDefaults = {"dropout" : False}
+        
+        
+
 
 class InputLayer(Layer):
  
@@ -47,7 +54,8 @@ class InputLayer(Layer):
         Layer.__hasRequiredFields__(paramDic.keys(), requiredFields)
     
         nFeatures = paramDic["nFeatures"]
-        
+
+
         if "dropout" not in paramDic:
             dropout = False
         else:
@@ -306,8 +314,8 @@ sess.run(tf.initialize_all_variables())
 print sess.run(readout.activations, feed_dict={inputLayer.activations:mnist.train.next_batch(5)[0], fc1.keepProb:1})
 
 
-#Example of possible general network definition
 
+#Example of possible general network definition
 network = Network([[InputLayer,{         "nFeatures" : 784 }], \
               [ReshapeLayer,{             "newShape" : [-1, 28, 28, 1] }], \
               [ConvLayer,{              "filterSize" : [5,5,1,32], \
@@ -327,3 +335,11 @@ network = Network([[InputLayer,{         "nFeatures" : 784 }], \
 sess.run(tf.initialize_all_variables())
 print network.forward(sess, mnist.train.next_batch(5)[0], float(0.9))
 
+
+globalDefaults = {"a":1, "b":2, "c":3}
+layerDefaults = {"a":2, "d":4, "e":5}
+initDictionary = {"b":3, "d":5, "f":3}
+globalDefaults.update(layerDefaults)
+globalDefaults.update(initDictionary)
+
+print globalDefaults
