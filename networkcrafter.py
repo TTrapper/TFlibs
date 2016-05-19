@@ -1,6 +1,5 @@
 import numpy as np
 import tensorflow as tf
-from tensorflow.examples.tutorials.mnist import input_data
 
 class Layer:
 
@@ -269,59 +268,3 @@ class MLP(Network):
                                  "activationFunction" : outActivation}])
 
         Network.__init__(self, initList)
-
-
-
-#in h1 h2 h3 ou
-#d1 d2 d3 d4 
-#   a1 a2 a3 a4
-
-sess = tf.InteractiveSession()
-hActivation = tf.nn.relu
-outActivation = tf.nn.softmax
-
-activations = (4*[hActivation]).append(outActivation)
-dropouts = [True, False, False, True, True]
-
-net = MLP([10,20,30,10,11,2], activations, dropouts)
-sess.run(tf.initialize_all_variables())
-
-print net.forward(sess, np.ones([5,10]), 0.5)
-
-mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
-
-inputLayer = InputLayer(784)
-as2D = ReshapeLayer(inputLayer, [-1,28,28,1])
-conv1 = ConvLayer(as2D, tf.nn.relu, [5,5,1,32])
-pool1 = PoolLayer(conv1, [1, 2, 2, 1], [1, 2, 2, 1])
-conv2 = ConvLayer(pool1, tf.nn.relu, [5,5,32,64])
-pool2 = PoolLayer(conv2, [1, 2, 2, 1], [1, 2, 2, 1])
-flat = ReshapeLayer(pool2, [-1, 7*7*64])
-fc1 = FullConnectLayer(flat, 1024, tf.nn.relu, True)
-readout = FullConnectLayer(fc1, 10, tf.nn.softmax)
-
-sess.run(tf.initialize_all_variables())
-
-print sess.run(readout.activations, feed_dict={inputLayer.activations:mnist.train.next_batch(5)[0], fc1.keepProb:1})
-
-
-
-#Example of possible general network definition
-network = Network([[InputLayer,{         "nFeatures" : 784 }], \
-              [ReshapeLayer,{             "newShape" : [-1, 28, 28, 1] }], \
-              [ConvLayer,{              "filterSize" : [5,5,1,32], \
-                                "activationFunction" : tf.nn.relu }], \
-              [PoolLayer,{                "poolSize" : [1, 2, 2, 1] }], \
-              [ConvLayer,{              "filterSize" : [5,5,32,64], \
-                                "activationFunction" : tf.nn.relu }], \
-              [PoolLayer,{                "poolSize" : [1, 2, 2, 1] }], \
-              [ReshapeLayer,{             "newShape" : [-1, 7*7*64] }], \
-              [FullConnectLayer,{           "nNodes" : 1024, 
-                                "activationFunction" : tf.nn.relu, \
-                                           "dropout" : True }], \
-              [FullConnectLayer,{           "nNodes" : 10, \
-                                "activationFunction" : tf.nn.softmax }]
-              ])
-
-sess.run(tf.initialize_all_variables())
-print network.forward(sess, mnist.train.next_batch(5)[0], float(0.9))
