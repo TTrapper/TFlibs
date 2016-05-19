@@ -200,16 +200,27 @@ class Network:
         self.hiddens = self.layers[1:-1]
         self.outLayer = self.layers[-1]
         
-    def forward(self, sess, x, keepProb=1):
+    def forward(self, sess, inputs, keepProb=1):
         """Do a forward pass through the network and return the result.
 
-        x -- The input data
+        inputs -- The input data
         keepProb -- For layers with dropout, the probability of keeping each node
 
         """
+        feedDict = self.getFeedDict(inputs, keepProb)
 
+        return sess.run(self.outLayer.activations, feed_dict=feedDict)        
+        
+    def getFeedDict(self, inputs, keepProb, extras={}):
+
+        """Create a feed dicionary for tensorflow. 
+
+        inputs -- The input data to be slotted into the input layer activations
+        keepProb -- For layers with dropout, the probability of keeping each node
+        extras -- Any values to be added to the dictionary that are external to the network
+        """
         # Define the feed_dict for a forward pass
-        feedDict = {self.inLayer.activations:x}
+        feedDict = {self.inLayer.activations : inputs}
         # For each layer with dropout, add its keepProb to feed_dict
         possibleDropoutLayers = [self.inLayer]
         possibleDropoutLayers.extend(self.hiddens)
@@ -217,8 +228,8 @@ class Network:
             if layer.applyDropout:
                 feedDict[layer.keepProb] = keepProb
 
-        return sess.run(self.outLayer.activations, feed_dict=feedDict)        
-        
+        feedDict.update(extras)
+        return feedDict
 
 class MLP(Network):
 
