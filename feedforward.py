@@ -32,11 +32,20 @@ class Layer:
                     ", in parameters dictionary")
 
     @staticmethod
-    def __addDefaultsToDict__(initDictionary, specificLayerDefaults={}):
+    def __updateDefaults__(initDictionary, layerDefaults={}):
+        """Used by subclasses to fill in missing init parameters with defaults. User specified
+        values take precedence over the layers defaults, which take precedence over globals.
+
+        initDictionary -- User supplied dictionary of parameters
+        layerDefaults -- default values specific to the Layer subclass
+        """
+  
+        globalDefaults = {"dropout" : False}
         
-        globalLayerDefaults = {"dropout" : False}
+        globalDefaults.update(layerDefaults)
+        globalDefaults.update(initDictionary)
         
-        
+        return globalDefaults        
 
 
 class InputLayer(Layer):
@@ -53,13 +62,10 @@ class InputLayer(Layer):
         requiredFields = ["nFeatures"]
         Layer.__hasRequiredFields__(paramDic.keys(), requiredFields)
     
+        paramDic = Layer.__updateDefaults__(paramDic)
+
         nFeatures = paramDic["nFeatures"]
-
-
-        if "dropout" not in paramDic:
-            dropout = False
-        else:
-            dropout = paramDic["dropout"]
+        dropout   = paramDic["dropout"]
 
         return cls(nFeatures, dropout)
  
@@ -82,15 +88,13 @@ class FullConnectLayer(Layer):
 
         requiredFields = ["inLayer", "nNodes", "activationFunction"]       
         Layer.__hasRequiredFields__(paramDic.keys(), requiredFields)
+      
+        paramDic = Layer.__updateDefaults__(paramDic)
 
-        inLayer = paramDic["inLayer"]
-        nNodes = paramDic["nNodes"]
-        activationFunction = paramDic["activationFunction"]
-        
-        if "dropout" not in paramDic:
-            dropout = False
-        else:
-            dropout = paramDic["dropout"]
+        inLayer            = paramDic["inLayer"]
+        nNodes             = paramDic["nNodes"]
+        activationFunction = paramDic["activationFunction"]       
+        dropout            = paramDic["dropout"]
 
         return cls(inLayer, nNodes, activationFunction, dropout)
 
@@ -114,18 +118,14 @@ class ConvLayer(Layer):
         requiredFields = ["inLayer", "activationFunction", "filterSize"]       
         Layer.__hasRequiredFields__(paramDic.keys(), requiredFields)
         
-        inLayer = paramDic["inLayer"]
+        layerDefaults = {"strides":[1,1,1,1]}
+        paramDic = Layer.__updateDefaults__(paramDic, layerDefaults)
+
+        inLayer            = paramDic["inLayer"]
         activationFunction = paramDic["activationFunction"]
-        filterSize = paramDic["filterSize"]
-       
-        if "strides" not in paramDic:
-            strides = [1,1,1,1]
-        else:
-            strides = paramDic["strides"]
-        if "dropout" not in paramDic:
-            dropout = False
-        else:
-            dropout = paramDic["dropout"]
+        filterSize         = paramDic["filterSize"]  
+        strides            = paramDic["strides"]
+        dropout            = paramDic["dropout"]
 
         return cls(inLayer, activationFunction, filterSize, strides, dropout)
        
@@ -144,21 +144,14 @@ class PoolLayer(Layer):
         requiredFields = ["inLayer", "poolSize"]       
         Layer.__hasRequiredFields__(paramDic.keys(), requiredFields)
         
-        inLayer = paramDic["inLayer"]
-        poolSize = paramDic["poolSize"]
-       
-        if "strides" not in paramDic:
-            strides = paramDic["poolSize"]
-        else:
-            strides = paramDic["strides"] 
-        if "poolType" not in paramDic:
-            poolType = tf.nn.max_pool
-        else:
-            poolType = paramDic["poolType"]
-        if "dropout" not in paramDic:
-            dropout = False
-        else:
-            dropout = paramDic["dropout"]
+        layerDefaults = {"strides" : paramDic["poolSize"], "poolType" : tf.nn.max_pool}
+        paramDic = Layer.__updateDefaults__(paramDic, layerDefaults)
+
+        inLayer  = paramDic["inLayer"]
+        poolSize = paramDic["poolSize"]     
+        strides  = paramDic["strides"] 
+        poolType = paramDic["poolType"]
+        dropout  = paramDic["dropout"]
 
         return cls(inLayer, poolSize, strides, dropout, poolType)
 
@@ -176,14 +169,12 @@ class ReshapeLayer(Layer):
         requiredFields = ["inLayer", "newShape"]       
         Layer.__hasRequiredFields__(paramDic.keys(), requiredFields)
         
-        inLayer = paramDic["inLayer"]
-        newShape = paramDic["newShape"]
-     
-        if "dropout" not in paramDic:
-            dropout = False
-        else:
-            dropout = paramDic["dropout"]
+        paramDic = Layer.__updateDefaults__(paramDic)
 
+        inLayer  = paramDic["inLayer"]
+        newShape = paramDic["newShape"]
+        dropout  = paramDic["dropout"]
+        
         return cls(inLayer, newShape,dropout)
 
 
@@ -334,12 +325,3 @@ network = Network([[InputLayer,{         "nFeatures" : 784 }], \
 
 sess.run(tf.initialize_all_variables())
 print network.forward(sess, mnist.train.next_batch(5)[0], float(0.9))
-
-
-globalDefaults = {"a":1, "b":2, "c":3}
-layerDefaults = {"a":2, "d":4, "e":5}
-initDictionary = {"b":3, "d":5, "f":3}
-globalDefaults.update(layerDefaults)
-globalDefaults.update(initDictionary)
-
-print globalDefaults
