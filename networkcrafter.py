@@ -9,8 +9,13 @@ class Layer:
         activations -- the output values of this layer, may be a tf.placeholder or tensor
         dropout -- whether or not dropout is to be applied to this layer
         """
+
+        if not isinstance(activations, tf.Tensor):
+            raise TypeError("A layer's activations must be of type TensorFlow.Tensor.")
+
         self.shape = shape
         self.activations = activations
+
         self.applyDropout = dropout       
 
         if dropout is True:
