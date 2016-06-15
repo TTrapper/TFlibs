@@ -77,6 +77,24 @@ class ReshapeLayer(Layer):
         Layer.__init__(self, newShape, activations, dropout)
 
 
+class RNN(Layer):
+
+    def __init__(self, inLayer, nNodes, nOut, activationFunction, dropout=False):
+        
+        self.xWeights = tf.Variable(tf.truncated_normal([inLayer.shape[1], nNodes]), stddev=0.1)
+        self.hWeights = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
+        self.yWeights = tf.Variable(tf.truncated_normal([nNodes, nOut], stddev=0.1))
+
+        # Define the update to the hidden layer    
+        hUpdate = tf.matmul(inLayer.activations, self.xWeights)
+        hUpdate += tf.matmul(hiddenUpdate, self.hWeights)
+        hUpdate = tf.tanh(hiddenUpdate)
+
+        activations = activationFunction(tf.matmul(hUpdate, yWeights))
+
+        Layer.__init__(self, [nNodes, nOut], activations, dropout)
+        
+
 class Network:
 
     def inputLayer(self, nFeatures, dropout=False):
