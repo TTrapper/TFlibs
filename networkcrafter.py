@@ -184,10 +184,39 @@ class ReshapeLayer(Layer):
 
 class Network:
 
+    def inputLayer(self, nFeatures, dropout=False):
+        self.inLayer = InputLayer(nFeatures, dropout)
+        self.layers = [self.inLayer]
+        self.hiddens = []
+        self.outLayer = self.inLayer
+      
+    def fullConnectLayer(self,  nNodes, activationFunction, dropout=False):
+        self.__addLayer__(FullConnectLayer(self.outLayer, nNodes, activationFunction, dropout))
+
+    def convLayer(self, activationFunction, filterSize, strides=[1,1,1,1], dropout=False):
+        self.__addLayer__(ConvLayer(self.outLayer, activationFunction, filterSize, strides, dropout))
+    
+    def poolLayer(self,  poolSize, strides=None, dropout=False, poolType=tf.nn.max_pool):
+        if strides is None:
+            strides = poolSize
+        self.__addLayer__(PoolLayer(self.outLayer, poolSize, strides, dropout, poolType))
+
+    def reshapeLayer(self, newShape, dropout=False):
+        self.__addLayer__(ReshapeLayer(self.outLayer, newShape, dropout))
+    
+    def __addLayer__(self, layer):
+        self.layers.append(layer)
+        self.hiddens.append(layer)
+        self.outLayer = layer
+
+    def __init__(self):
+        self.hiddens =[]
+        
+    """
     def __init__(self, layerList):
-        """
-        layerList - list of tuples, each being a Layer class and a dictionary of init parameters
-        """
+     
+#        layerList - list of tuples, each being a Layer class and a dictionary of init parameters
+      
 
         if len(layerList) < 3:
             raise RuntimeError('Networks with less than 3 layers not currently supported')
@@ -204,7 +233,7 @@ class Network:
             
         self.hiddens = self.layers[1:-1]
         self.outLayer = self.layers[-1]
-        
+    """        
     def forward(self, sess, inputs, keepProb=1):
         """Do a forward pass through the network and return the result.
 
