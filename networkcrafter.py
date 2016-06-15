@@ -289,27 +289,14 @@ class MLP(Network):
 
         if len(dropouts) != len(sizes)-1:
             raise RuntimeError("Must specify whether to apply dropout to each layer" + \
-                                " (excluding output layer). Use None for default.")
-
-
-        # Input and output layers are sometimes special cases, keep them separate
-        nIn = sizes[0]
-        hiddenSizes = sizes[1:-2]
-        nOut = sizes[-1]
-
-        # No activations on the inputs, here we separate the output layer's activation
-        hiddenActivations = activations[:-2]
-        outActivation = activations[-1]
-
-        # Define the layers as a list of tuples to be passed to Network constructor
-        initList = [[InputLayer, {"nFeatures" : nIn, "dropout" : dropouts[0]}]] 
-
-        for nNodes,activation,dropout in zip(hiddenSizes, hiddenActivations, dropouts[1:]):
-            initList.append([FullConnectLayer, { "nNodes" : nNodes,\
-                                     "activationFunction" : activation,\
-                                                "dropout" : dropout}])
-
-        initList.append([FullConnectLayer, { "nNodes" : nOut,\
-                                 "activationFunction" : outActivation}])
-
-        Network.__init__(self, initList)
+                                " (excluding output layer). Use None for default.") 
+        
+        # Never use dropout on the last layer
+        dropouts.append(False)       
+ 
+        # Initialize superclass and add the layers
+        Network.__init__(self)
+        
+        self.inputLayer(sizes[0], dropouts[0])
+        for nNodes,activation,dropout in zip(sizes[1:], activations, dropouts[1:]):
+            self.fullConnectLayer(nNodes, activation, dropout)
