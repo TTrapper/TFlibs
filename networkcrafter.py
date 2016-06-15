@@ -85,7 +85,8 @@ class RNN(Layer):
         self.hWeights = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
         self.yWeights = tf.Variable(tf.truncated_normal([nNodes, nOut], stddev=0.1))
 
-        # Define the update to the hidden layer    
+        """WRONG: Overwriting hidden state on every new input. Update hidden and x-state separetly, then combine."""
+        # Define the update to the hidden layer
         hUpdate = tf.matmul(inLayer.activations, self.xWeights)
         hUpdate += tf.matmul(hiddenUpdate, self.hWeights)
         hUpdate = tf.tanh(hiddenUpdate)
