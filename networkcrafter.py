@@ -22,35 +22,6 @@ class Layer:
             self.keepProb = tf.placeholder(tf.float32) 
             self.activations = tf.nn.dropout(self.activations, self.keepProb)
 
-    @staticmethod
-    def __hasRequiredFields__(dictionaryKeys, requiredFields):
-        """Used by subclasses to ensure that parameter-value dictionaries have necessary values
-       
-        dictionaryKeys -- keys that exist in a dictionary
-        requiredFields -- keys that are expected to exist in the dictionary
-        """
-
-        for field in requiredFields:
-            if field not in dictionaryKeys:
-                raise RuntimeError("Missing required key, " + field  + \
-                    ", in parameters dictionary")
-
-    @staticmethod
-    def __updateDefaults__(initDictionary, layerDefaults={}):
-        """Used by subclasses to fill in missing init parameters with defaults. User specified
-        values take precedence over the layers defaults, which take precedence over globals.
-
-        initDictionary -- User supplied dictionary of parameters
-        layerDefaults -- default values specific to the Layer subclass
-        """
-  
-        globalDefaults = {"dropout" : False}
-        
-        globalDefaults.update(layerDefaults)
-        globalDefaults.update(initDictionary)
-        
-        return globalDefaults        
-
 
 class InputLayer(Layer):
  
@@ -60,19 +31,6 @@ class InputLayer(Layer):
        
         Layer.__init__(self, shape, activations, dropout)
 
-    @classmethod
-    def fromDictionary(cls, paramDic):
-
-        requiredFields = ["nFeatures"]
-        Layer.__hasRequiredFields__(paramDic.keys(), requiredFields)
-    
-        paramDic = Layer.__updateDefaults__(paramDic)
-
-        nFeatures = paramDic["nFeatures"]
-        dropout   = paramDic["dropout"]
-
-        return cls(nFeatures, dropout)
- 
 
 class FullConnectLayer(Layer):
 
@@ -86,21 +44,6 @@ class FullConnectLayer(Layer):
         activations = activationFunction(weightedInput)
         
         Layer.__init__(self, shape, activations, dropout)
-
-    @classmethod
-    def fromDictionary(cls, paramDic):
-
-        requiredFields = ["inLayer", "nNodes", "activationFunction"]       
-        Layer.__hasRequiredFields__(paramDic.keys(), requiredFields)
-      
-        paramDic = Layer.__updateDefaults__(paramDic)
-
-        inLayer            = paramDic["inLayer"]
-        nNodes             = paramDic["nNodes"]
-        activationFunction = paramDic["activationFunction"]       
-        dropout            = paramDic["dropout"]
-
-        return cls(inLayer, nNodes, activationFunction, dropout)
 
 
 class ConvLayer(Layer):
@@ -116,23 +59,6 @@ class ConvLayer(Layer):
      
         Layer.__init__(self, filterSize, activations, dropout)
 
-    @classmethod
-    def fromDictionary(cls, paramDic):
-
-        requiredFields = ["inLayer", "activationFunction", "filterSize"]       
-        Layer.__hasRequiredFields__(paramDic.keys(), requiredFields)
-        
-        layerDefaults = {"strides":[1,1,1,1]}
-        paramDic = Layer.__updateDefaults__(paramDic, layerDefaults)
-
-        inLayer            = paramDic["inLayer"]
-        activationFunction = paramDic["activationFunction"]
-        filterSize         = paramDic["filterSize"]  
-        strides            = paramDic["strides"]
-        dropout            = paramDic["dropout"]
-
-        return cls(inLayer, activationFunction, filterSize, strides, dropout)
-       
         
 class PoolLayer(Layer):
 
@@ -142,23 +68,6 @@ class PoolLayer(Layer):
 
         Layer.__init__(self, poolSize, activations, dropout)
 
-    @classmethod
-    def fromDictionary(cls, paramDic):
-
-        requiredFields = ["inLayer", "poolSize"]       
-        Layer.__hasRequiredFields__(paramDic.keys(), requiredFields)
-        
-        layerDefaults = {"strides" : paramDic["poolSize"], "poolType" : tf.nn.max_pool}
-        paramDic = Layer.__updateDefaults__(paramDic, layerDefaults)
-
-        inLayer  = paramDic["inLayer"]
-        poolSize = paramDic["poolSize"]     
-        strides  = paramDic["strides"] 
-        poolType = paramDic["poolType"]
-        dropout  = paramDic["dropout"]
-
-        return cls(inLayer, poolSize, strides, dropout, poolType)
-
 
 class ReshapeLayer(Layer):
 
@@ -166,20 +75,6 @@ class ReshapeLayer(Layer):
         activations = tf.reshape(inLayer.activations, newShape);
         
         Layer.__init__(self, newShape, activations, dropout)
-
-    @classmethod
-    def fromDictionary(cls, paramDic):
-
-        requiredFields = ["inLayer", "newShape"]       
-        Layer.__hasRequiredFields__(paramDic.keys(), requiredFields)
-        
-        paramDic = Layer.__updateDefaults__(paramDic)
-
-        inLayer  = paramDic["inLayer"]
-        newShape = paramDic["newShape"]
-        dropout  = paramDic["dropout"]
-        
-        return cls(inLayer, newShape,dropout)
 
 
 class Network:
@@ -212,28 +107,6 @@ class Network:
     def __init__(self):
         self.hiddens =[]
         
-    """
-    def __init__(self, layerList):
-     
-#        layerList - list of tuples, each being a Layer class and a dictionary of init parameters
-      
-
-        if len(layerList) < 3:
-            raise RuntimeError('Networks with less than 3 layers not currently supported')
-        
-        inClass, inDictionary = layerList[0]
-        self.inLayer = inClass.fromDictionary(inDictionary)
-
-        self.layers = [self.inLayer]
-        for layer in layerList[1:]:
-            layerClass, layerDictionary = layer
-            layerDictionary["inLayer"] = self.layers[-1]
-             
-            self.layers.append(layerClass.fromDictionary(layerDictionary))
-            
-        self.hiddens = self.layers[1:-1]
-        self.outLayer = self.layers[-1]
-    """        
     def forward(self, sess, inputs, keepProb=1):
         """Do a forward pass through the network and return the result.
 
