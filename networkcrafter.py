@@ -81,20 +81,25 @@ class RNN(Layer):
 
     def __init__(self, inLayer, nNodes, nOut, activationFunction, dropout=False):
         
-        self.xWeights = tf.Variable(tf.truncated_normal([inLayer.shape[1], nNodes]), stddev=0.1)
+        self.xWeights = tf.Variable(tf.truncated_normal([inLayer.shape[1], nNodes], stddev=0.1))
         self.hWeights = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
         self.yWeights = tf.Variable(tf.truncated_normal([nNodes, nOut], stddev=0.1))
 
-        """WRONG: Overwriting hidden state on every new input. Update hidden and x-state separetly, then combine."""
-        # Define the update to the hidden layer
-        hUpdate = tf.matmul(inLayer.activations, self.xWeights)
-        hUpdate += tf.matmul(hiddenUpdate, self.hWeights)
-        hUpdate = tf.tanh(hiddenUpdate)
+        # Hidden state
+        self.h = tf.zeros([1, nNodes], tf.float32)
 
-        activations = activationFunction(tf.matmul(hUpdate, yWeights))
+        # Define the update to the hidden state        
+        updateX = tf.matmul(inLayer.activations, self.xWeights)
+        updateH = tf.matmul(self.h, self.hWeights)
+        self.h = tf.tanh(updateX + updateH)
+
+        activations = activationFunction(tf.matmul(self.h, self.yWeights))
 
         Layer.__init__(self, [nNodes, nOut], activations, dropout)
-        
+   
+    def resetHiddenState(self):
+        self.h = tf.zeros([1, self.shape[0]], tf.float32)
+     
 
 class Network:
 
