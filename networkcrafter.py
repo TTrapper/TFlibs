@@ -85,15 +85,19 @@ class RNN(Layer):
         self.hWeights = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
         self.yWeights = tf.Variable(tf.truncated_normal([nNodes, nOut], stddev=0.1))
 
+        self.xBias = tf.Variable(tf.zeros([nNodes]))
+        self.hBias = tf.Variable(tf.zeros([nNodes]))
+        self.yBias = tf.Variable(tf.zeros([nOut]))
+
         # Hidden state
         self.h = tf.zeros([1, nNodes], tf.float32)
 
         # Define the update to the hidden state        
-        updateX = tf.matmul(inLayer.activations, self.xWeights)
-        updateH = tf.matmul(self.h, self.hWeights)
-        self.h = tf.tanh(updateX + updateH)
+        updateX = tf.matmul(inLayer.activations, self.xWeights) + self.xBias
+        updateH = tf.matmul(self.h, self.hWeights) + self.hBias;
+        self.h = tf.tanh(0.5*updateX + updateH)
 
-        activations = activationFunction(tf.matmul(self.h, self.yWeights))
+        activations = activationFunction(tf.matmul(self.h, self.yWeights) + self.yBias)
 
         Layer.__init__(self, [nNodes, nOut], activations, dropout)
    
