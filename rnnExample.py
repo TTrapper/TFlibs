@@ -3,28 +3,32 @@ import numpy as np
 tf = nc.tf
 
 trainingSequence = 'the quick brown fox jumps over the lazy dog'
-trainingSequence = 'a b c d e f g h i j k l m n o p q r s t u v w x y z'
-trainingSequence='abcdefghijklmnopqrstuvwxyz'
-trainingSequence = list(trainingSequence)
+#trainingSequence = 'a b c d e f g h i j k l m n o p q r s t u v w x y z'
+#trainingSequence='abcdefghijklmnopqrstuvwxyz'
+#trainingSequence='aaaab'
 
-NUM_CHARS = len(set(trainingSequence))+1
-ASCII_OFFSET = 97 
+# Add special START and STOP chars to the sequence
+trainingSequence = list('#'+trainingSequence+'$')
+print trainingSequence
 
+NUM_CHARS = len(set(trainingSequence))
+# Map chars to ints
 trainingNums = []
-[trainingNums.append(ord(letter)) for letter in trainingSequence]
+uniques = list(set(trainingSequence))
+for letter in trainingSequence:
+    trainingNums.append(uniques.index(letter))
 
+# Dictionary gets us the chars back
+num2Char = dict(zip(trainingNums, trainingSequence))
+
+# Target array and source array, offset by 1
 targets = np.array(trainingNums[1:])
-targets = targets-ASCII_OFFSET
-targets = np.where(targets<0, NUM_CHARS-2, targets)
-targets = np.concatenate([targets, [NUM_CHARS-1]])
+sources = np.array(trainingNums[:-1])
 
-sources = targets[:-1]
-sources = np.concatenate([[trainingNums[0]-ASCII_OFFSET], sources])
-print sources
+# One-hot representations
 onehot_targets = np.zeros([len(targets), NUM_CHARS])
 for i in range(len(targets)):
     onehot_targets[i,targets[i]] = 1
-
 onehot_sources = np.zeros([len(sources), NUM_CHARS])
 for i in range(len(sources)):
     onehot_sources[i,sources[i]] = 1
@@ -32,7 +36,7 @@ for i in range(len(sources)):
 
 # The RNN
 inLayer = nc.InputLayer(NUM_CHARS)
-rnnLayer = nc.RNN(inLayer, 10, NUM_CHARS, tf.nn.softmax)
+rnnLayer = nc.RNN(inLayer, 100, NUM_CHARS, tf.nn.softmax)
 
 y_ = tf.placeholder(tf.float32, shape=[None, NUM_CHARS])
 
@@ -57,10 +61,17 @@ for i in range(10000):
         target = onehot_targets[j]
         source.shape = 1, source.shape[0]
         target.shape = 1, target.shape[0]
-        
-        train_step.run(feed_dict={inLayer.activations:source, y_:target})    
 
-    rnnLayer.resetHiddenState()
+        if j == 0:
+            h = rnnLayer.getZeroState()
+        else:
+            h = rnnLayer.getCurrentState(prevSource, h, sess)
+         
+        train_step.run(feed_dict={inLayer.activations:source, y_:target, rnnLayer.h:h})
+        prevSource = source 
+            
+#    rnnLayer.resetHiddenState(sess)
+    
     if i%10 == 0:
                 
         answer_fed = [trainingSequence[0]]
@@ -69,12 +80,16 @@ for i in range(10000):
             source = onehot_sources[j]
             source.shape = 1, source.shape[0]
 
-            answer_fed.append(chr(ASCII_OFFSET+np.argmax(sess.run(rnnLayer.activations, feed_dict={inLayer.activations:source}))))
-
+            if j == 0:
+                h = rnnLayer.getZeroState()
+            else:
+                h = rnnLayer.getCurrentState(prevSource, h, sess)
+            answer_fed.append(num2Char[np.argmax(sess.run(rnnLayer.activations, feed_dict={inLayer.activations:source, rnnLayer.h:h}))])
+        
+        prevSource = source
         print ''.join(answer_fed).replace('{', ' ')
-    
-    #train_step.run(feed_dict={inLayer.activations:onehot_sources, y_:onehot_targets})
-    rnnLayer.resetHiddenState()
+
+#    rnnLayer.resetHiddenState(sess)
 
 answer_fed = [trainingSequence[0]]
 for i in range(targets.shape[0]):
@@ -82,11 +97,12 @@ for i in range(targets.shape[0]):
     source = onehot_sources[i]
     source.shape = 1, source.shape[0]
 
-    answer_fed.append(chr(ASCII_OFFSET+np.argmax(sess.run(rnnLayer.activations, feed_dict={inLayer.activations:source}))))
+    answer_fed.append(num2Char[np.argmax(sess.run(rnnLayer.activations, feed_dict={inLayer.activations:source}))])
+
 
 print ''.join(answer_fed).replace('{', ' ')
 
-rnnLayer.resetHiddenState()
+#rnnLayer.resetHiddenState()
 
 predict_fed = [trainingSequence[0]]
 last_predict = onehot_sources[0]
@@ -96,6 +112,6 @@ for i in range(targets.shape[0]):
     predict = sess.run(rnnLayer.activations, feed_dict={inLayer.activations:last_predict})
     last_predict = predict
 
-    predict_fed.append(chr(ASCII_OFFSET+np.argmax(predict)))
+    predict_fed.append(num2Char[np.argmax(predict)])
 
 print ''.join(predict_fed)

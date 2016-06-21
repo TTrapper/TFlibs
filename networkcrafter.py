@@ -81,6 +81,8 @@ class RNN(Layer):
 
     def __init__(self, inLayer, nNodes, nOut, activationFunction, dropout=False):
         
+        self.inLayer = inLayer
+
         self.xWeights = tf.Variable(tf.truncated_normal([inLayer.shape[1], nNodes], stddev=0.1))
         self.hWeights = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
         self.yWeights = tf.Variable(tf.truncated_normal([nNodes, nOut], stddev=0.1))
@@ -90,20 +92,22 @@ class RNN(Layer):
         self.yBias = tf.Variable(tf.zeros([nOut]))
 
         # Hidden state
-        self.h = tf.zeros([1, nNodes], tf.float32)
+        self.h = tf.placeholder(tf.float32, shape=[1, nNodes])
 
         # Define the update to the hidden state        
-        updateX = tf.matmul(inLayer.activations, self.xWeights) + self.xBias
-        updateH = tf.matmul(self.h, self.hWeights) + self.hBias;
-        self.h = tf.tanh(0.5*updateX + updateH)
+        self.updateX = tf.matmul(inLayer.activations, self.xWeights) + self.xBias
+        self.updateH = tf.matmul(self.h, self.hWeights) + self.hBias;
+        self.newH = tf.tanh(self.updateX + self.updateH)
 
-        activations = activationFunction(tf.matmul(self.h, self.yWeights) + self.yBias)
+        activations = activationFunction(tf.matmul(self.newH, self.yWeights) + self.yBias)
 
         Layer.__init__(self, [nNodes, nOut], activations, dropout)
    
-    def resetHiddenState(self):
-        self.h = tf.zeros([1, self.shape[0]], tf.float32)
-     
+    def getZeroState(self):
+        return np.zeros([1, self.shape[0]])
+
+    def getCurrentState(self, x, h, sess):
+        return self.newH.eval(feed_dict={self.inLayer.activations:x, self.h:h}, session=sess)
 
 class Network:
 
