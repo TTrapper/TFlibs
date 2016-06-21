@@ -2,21 +2,25 @@ import networkcrafter as nc
 import numpy as np
 tf = nc.tf
 
-trainingSequence = ['t', 'h', 'e', ' ', 'q', 'u', 'i', 'c', 'k', ' ', 'b', 'r', 'o', 'w', 'n', ' ', 'f', 'o', 'x', ' ', 'j', 'u', 'm', 'p', 's', ' ', 'o', 'v', 'e', 'r', ' ', 't', 'h', 'e', ' ', 'l', 'a', 'z', 'y', ' ', 'd', 'o', 'g']
+trainingSequence = 'the quick brown fox jumps over the lazy dog'
+trainingSequence = 'a b c d e f g h i j k l m n o p q r s t u v w x y z'
+trainingSequence='abcdefghijklmnopqrstuvwxyz'
+trainingSequence = list(trainingSequence)
 
-NUM_CHARS = 28
+NUM_CHARS = len(set(trainingSequence))+1
+ASCII_OFFSET = 97 
 
 trainingNums = []
 [trainingNums.append(ord(letter)) for letter in trainingSequence]
 
 targets = np.array(trainingNums[1:])
-targets = targets-97
-targets = np.where(targets<0, 26, targets)
-targets = np.concatenate([targets, [27]])
+targets = targets-ASCII_OFFSET
+targets = np.where(targets<0, NUM_CHARS-2, targets)
+targets = np.concatenate([targets, [NUM_CHARS-1]])
 
 sources = targets[:-1]
-sources = np.concatenate([[19], sources])
-
+sources = np.concatenate([[trainingNums[0]-ASCII_OFFSET], sources])
+print sources
 onehot_targets = np.zeros([len(targets), NUM_CHARS])
 for i in range(len(targets)):
     onehot_targets[i,targets[i]] = 1
@@ -28,7 +32,7 @@ for i in range(len(sources)):
 
 # The RNN
 inLayer = nc.InputLayer(NUM_CHARS)
-rnnLayer = nc.RNN(inLayer, 300, NUM_CHARS, tf.nn.softmax)
+rnnLayer = nc.RNN(inLayer, 10, NUM_CHARS, tf.nn.softmax)
 
 y_ = tf.placeholder(tf.float32, shape=[None, NUM_CHARS])
 
@@ -59,34 +63,32 @@ for i in range(10000):
     rnnLayer.resetHiddenState()
     if i%10 == 0:
                 
-        answer_fed = ['t']
+        answer_fed = [trainingSequence[0]]
         for j in range(targets.shape[0]):
             
             source = onehot_sources[j]
             source.shape = 1, source.shape[0]
 
-            answer_fed.append(chr(97+np.argmax(sess.run(rnnLayer.activations, feed_dict={inLayer.activations:source}))))
+            answer_fed.append(chr(ASCII_OFFSET+np.argmax(sess.run(rnnLayer.activations, feed_dict={inLayer.activations:source}))))
 
         print ''.join(answer_fed).replace('{', ' ')
     
     #train_step.run(feed_dict={inLayer.activations:onehot_sources, y_:onehot_targets})
     rnnLayer.resetHiddenState()
 
-
-
-answer_fed = ['t']
+answer_fed = [trainingSequence[0]]
 for i in range(targets.shape[0]):
     
     source = onehot_sources[i]
     source.shape = 1, source.shape[0]
 
-    answer_fed.append(chr(97+np.argmax(sess.run(rnnLayer.activations, feed_dict={inLayer.activations:source}))))
+    answer_fed.append(chr(ASCII_OFFSET+np.argmax(sess.run(rnnLayer.activations, feed_dict={inLayer.activations:source}))))
 
 print ''.join(answer_fed).replace('{', ' ')
 
 rnnLayer.resetHiddenState()
 
-predict_fed = ['t']
+predict_fed = [trainingSequence[0]]
 last_predict = onehot_sources[0]
 last_predict.shape = 1, last_predict.shape[0]
 for i in range(targets.shape[0]):
@@ -94,8 +96,6 @@ for i in range(targets.shape[0]):
     predict = sess.run(rnnLayer.activations, feed_dict={inLayer.activations:last_predict})
     last_predict = predict
 
-    predict_fed.append(chr(97+np.argmax(predict)))
+    predict_fed.append(chr(ASCII_OFFSET+np.argmax(predict)))
 
 print ''.join(predict_fed)
-
-
