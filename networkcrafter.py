@@ -83,41 +83,6 @@ def loopTry0(x):
     return tf.while_loop(c,b,[x])
 
 
-def loopTry1(x):
-
-    y = tf.ones([1,4])
-    def body(q, z):
-
-        v = tf.add(z, 1)
-        z = tf.add(v,v)
- 
-        return tf.add(q,1), z 
-
-    c = lambda i, j: tf.less(tf.reduce_sum(i), 16)
-
-    b = body 
-    return tf.while_loop(c,b,[x, y])
-
-
-def loopTry(x):
-
-    y = tf.ones([1,2], dtype=tf.int32)
-    co = tf.constant(0)
-    def body(q, z, counter):
-
-        v = tf.add(z, 1)
-#        z = tf.add(v,v)
-#        z = tf.slice(q, [counter, 0], size=[1,2])
-        z = tf.slice(q, [counter, 0], [1,2]) 
-        counter = tf.add(counter, 1) 
-        return tf.add(q,1), z, counter
-
-    c = lambda i, j, k: tf.less(k, 3)
-
-    b = body 
-    return tf.while_loop(c,b,[x, y, co])
-
-
 class RNN(Layer):
 
     def __init__(self, inLayer, nNodes, nOut, activationFunction, dropout=False):
@@ -146,8 +111,7 @@ class RNN(Layer):
                       self.yBias, \
                       inLayer.activations, \
                       self.h, \
-                      tf.zeros([7, inLayer.shape[1]], dtype=tf.float32)\
-#                      [] \
+                      tf.zeros([44, inLayer.shape[1]], dtype=tf.float32)\
                     ]
 
         def updateLoopBody(idx, xW, xB, hW, hB, yW, yB, x, h, y):
@@ -169,31 +133,10 @@ class RNN(Layer):
         condition = lambda idx, xW, xB, hW, hB, yW, yB, x, h, y: tf.less(idx, tf.shape(x)[0])
         updateLoop = tf.while_loop(condition, updateLoopBody, loopParams)
 
-        #activations = activationFunction(tf.slice(updateLoop[-1], [1,0], [-1, -1]))
-
         activations = activationFunction(updateLoop[-1])
 
-#        activations = tf.slice(updateLoop[-1], [1, 0], [-1, -1])
-        """
-        # Hidden state
-        self.h = tf.placeholder(tf.float32, shape=[1, nNodes], name='hS')
-        
-        # Define the update to the hidden state        
-        self.updateX = tf.matmul(inLayer.activations, self.xWeights) + self.xBias
-        self.updateH = tf.matmul(self.h, self.hWeights) + self.hBias;
-        self.newH = tf.tanh(self.updateX + self.updateH)
-
-        activations = activationFunction(tf.matmul(self.newH, self.yWeights) + self.yBias)
-        """
         Layer.__init__(self, [nNodes, nOut], activations, dropout)
    
-#    def getZeroState(self):
-#        return np.zeros([1, self.shape[0]])
-
-#    def getCurrentState(self, x, h, sess):
-#        return self.newH.eval(feed_dict={self.inLayer.activations:x, self.h:h}, session=sess)
-
-
 class Network:
 
     def inputLayer(self, nFeatures, dropout=False):

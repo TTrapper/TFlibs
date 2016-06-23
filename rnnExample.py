@@ -5,7 +5,7 @@ tf = nc.tf
 trainingSequence = 'the quick brown fox jumps over the lazy dog'
 #trainingSequence = 'a b c d e f g h i j k l m n o p q r s t u v w x y z'
 #trainingSequence='abcdefghijklmnopqrstuvwxyz'
-trainingSequence='aaaaab'
+#trainingSequence='aaaaab'
 
 # Add special START and STOP chars to the sequence
 trainingSequence = list('#'+trainingSequence+'$')
@@ -40,20 +40,6 @@ rnnLayer = nc.RNN(inLayer, 100, NUM_CHARS, tf.nn.softmax)
 
 y_ = tf.placeholder(tf.float32, shape=[None, NUM_CHARS])
 
-sess = tf.InteractiveSession()
-
-
-writer = tf.train.SummaryWriter("./tensorlog", sess.graph)
-sess.run(tf.initialize_all_variables())
-feed = {inLayer.activations:onehot_sources, y_:onehot_targets}
-
-act= sess.run(rnnLayer.activations, feed_dict=feed)
-print act
-print act.shape
-print onehot_sources.shape
-print onehot_targets.shape
-
-
 cross_entropy = -tf.reduce_sum(y_*tf.log(rnnLayer.activations))
 #mean_square = tf.reduce_mean((y_-rnnLayer.activations)**2)
 
@@ -70,40 +56,10 @@ sess.run(tf.initialize_all_variables())
 
 feed = {inLayer.activations:onehot_sources, y_:onehot_targets}
 
-for i in range(10000):
+for i in range(5000):
    
     train_step.run(feed_dict=feed)
 
-    if i%10 == 0:
-        print [num2Char[num] for num in np.argmax(sess.run(rnnLayer.activations, feed_dict=feed), axis=1)]
-    
-
-"""
-#    rnnLayer.resetHiddenState(sess)
-
-answer_fed = [trainingSequence[0]]
-for i in range(targets.shape[0]):
-    
-    source = onehot_sources[i]
-    source.shape = 1, source.shape[0]
-
-    answer_fed.append(num2Char[np.argmax(sess.run(rnnLayer.activations, feed_dict={inLayer.activations:source}))])
-
-
-print ''.join(answer_fed).replace('{', ' ')
-
-#rnnLayer.resetHiddenState()
-
-predict_fed = [trainingSequence[0]]
-last_predict = onehot_sources[0]
-last_predict.shape = 1, last_predict.shape[0]
-for i in range(targets.shape[0]):
-
-    predict = sess.run(rnnLayer.activations, feed_dict={inLayer.activations:last_predict})
-    last_predict = predict
-
-    predict_fed.append(num2Char[np.argmax(predict)])
-
-print ''.join(predict_fed)
-
-"""
+    if i%20 == 0:
+        predictions = np.argmax(sess.run(rnnLayer.activations, feed_dict=feed), axis=1)
+        print ''.join([num2Char[num] for num in predictions]) 
