@@ -27,7 +27,7 @@ class InputLayer(Layer):
  
     def __init__(self, nFeatures, dropout=False):
         shape = [None, nFeatures]
-        activations = tf.placeholder(tf.float32, shape=shape)
+        activations = tf.placeholder(tf.float32, shape=shape, name='xin')
        
         Layer.__init__(self, shape, activations, dropout)
 
@@ -76,6 +76,47 @@ class ReshapeLayer(Layer):
         
         Layer.__init__(self, newShape, activations, dropout)
 
+def loopTry0(x):
+
+    c = lambda i: tf.less(tf.reduce_sum(i), 100)
+    b = lambda i: tf.add(i, 1)
+    return tf.while_loop(c,b,[x])
+
+
+def loopTry1(x):
+
+    y = tf.ones([1,4])
+    def body(q, z):
+
+        v = tf.add(z, 1)
+        z = tf.add(v,v)
+ 
+        return tf.add(q,1), z 
+
+    c = lambda i, j: tf.less(tf.reduce_sum(i), 16)
+
+    b = body 
+    return tf.while_loop(c,b,[x, y])
+
+
+def loopTry(x):
+
+    y = tf.ones([1,2], dtype=tf.int32)
+    co = tf.constant(0)
+    def body(q, z, counter):
+
+        v = tf.add(z, 1)
+#        z = tf.add(v,v)
+#        z = tf.slice(q, [counter, 0], size=[1,2])
+        z = tf.slice(q, [counter, 0], [1,2]) 
+        counter = tf.add(counter, 1) 
+        return tf.add(q,1), z, counter
+
+    c = lambda i, j, k: tf.less(k, 3)
+
+    b = body 
+    return tf.while_loop(c,b,[x, y, co])
+
 
 class RNN(Layer):
 
@@ -83,31 +124,70 @@ class RNN(Layer):
         
         self.inLayer = inLayer
 
-        self.xWeights = tf.Variable(tf.truncated_normal([inLayer.shape[1], nNodes], stddev=0.1))
-        self.hWeights = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
-        self.yWeights = tf.Variable(tf.truncated_normal([nNodes, nOut], stddev=0.1))
+        self.xWeights = tf.Variable(tf.truncated_normal([inLayer.shape[1], nNodes], stddev=0.1), name='xW')
+        self.hWeights = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1), name='hW')
+        self.yWeights = tf.Variable(tf.truncated_normal([nNodes, nOut], stddev=0.1), name='yW')
 
         self.xBias = tf.Variable(tf.zeros([nNodes]))
         self.hBias = tf.Variable(tf.zeros([nNodes]))
         self.yBias = tf.Variable(tf.zeros([nOut]))
 
-        # Hidden state
-        self.h = tf.placeholder(tf.float32, shape=[1, nNodes])
+        self.h = tf.zeros([1, nNodes])
 
+        self.index = tf.constant(0, dtype=tf.int32)   
+ 
+        loopParams = [self.index,\
+                      self.xWeights,\
+                      self.xBias, \
+                      self.hWeights, \
+                      self.hBias, \
+                      self.yWeights, \
+                      self.yBias, \
+                      inLayer.activations, \
+                      self.h, \
+                      tf.zeros([1, inLayer.shape[1]], dtype=tf.float32)]
+
+        def updateLoopBody(idx, xW, xB, hW, hB, yW, yB, x, h, y):
+
+            x_t = tf.slice(x, [idx, 0], [1, -1])
+
+            uX = tf.matmul(x_t, xW) + xB
+            uH = tf.matmul(h, hW) + hB
+            h = tf.tanh(uX + uH)
+
+            y_t = tf.matmul(h, yW) + yB
+
+            y = tf.concat(0, [y, y_t])
+            idx = tf.add(idx, 1)
+
+            return idx, xW, xB, hW, hB, yW, yB, x, h, y
+           # return idx, xW, xB, hW, hB, yW, yB, x, h, tf.slice(y, [1,0], [-1, -1])
+
+        condition = lambda idx, xW, xB, hW, hB, yW, yB, x, h, y: tf.less(idx, tf.shape(x)[0])
+        updateLoop = tf.while_loop(condition, updateLoopBody, loopParams)
+
+        activations = activationFunction(tf.slice(updateLoop[-1], [1,0], [-1, -1]))
+
+        #activations = activationFunction(updateLoop[-1])
+        """
+        # Hidden state
+        self.h = tf.placeholder(tf.float32, shape=[1, nNodes], name='hS')
+        
         # Define the update to the hidden state        
         self.updateX = tf.matmul(inLayer.activations, self.xWeights) + self.xBias
         self.updateH = tf.matmul(self.h, self.hWeights) + self.hBias;
         self.newH = tf.tanh(self.updateX + self.updateH)
 
         activations = activationFunction(tf.matmul(self.newH, self.yWeights) + self.yBias)
-
+        """
         Layer.__init__(self, [nNodes, nOut], activations, dropout)
    
-    def getZeroState(self):
-        return np.zeros([1, self.shape[0]])
+#    def getZeroState(self):
+#        return np.zeros([1, self.shape[0]])
 
-    def getCurrentState(self, x, h, sess):
-        return self.newH.eval(feed_dict={self.inLayer.activations:x, self.h:h}, session=sess)
+#    def getCurrentState(self, x, h, sess):
+#        return self.newH.eval(feed_dict={self.inLayer.activations:x, self.h:h}, session=sess)
+
 
 class Network:
 
