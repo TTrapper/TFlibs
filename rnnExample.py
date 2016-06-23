@@ -2,8 +2,8 @@ import networkcrafter as nc
 import numpy as np
 tf = nc.tf
 
-trainingSequence = 'the quick brown fox jumps over the lazy dog'
-#trainingSequence = 'a b c d e f g h i j k l m n o p q r s t u v w x y z'
+#trainingSequence = 'the quick brown fox jumps over the lazy dog'
+trainingSequence = 'a b c d e f g h i j k l m n o p q r s t u v w x y z'
 #trainingSequence='abcdefghijklmnopqrstuvwxyz'
 #trainingSequence='aaaaab'
 
@@ -54,9 +54,9 @@ sess = tf.InteractiveSession()
 writer = tf.train.SummaryWriter("./tensorlog", sess.graph)
 sess.run(tf.initialize_all_variables())
 
-feed = {inLayer.activations:onehot_sources, y_:onehot_targets}
+feed = {inLayer.activations:onehot_sources, y_:onehot_targets, rnnLayer.y:onehot_targets}
 
-for i in range(5000):
+for i in range(10000):
    
     train_step.run(feed_dict=feed)
 

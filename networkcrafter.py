@@ -101,6 +101,7 @@ class RNN(Layer):
 
         self.index = tf.constant(0, dtype=tf.int32, name='loopCount')   
 
+        self.y = tf.placeholder(tf.float32, shape=[None, inLayer.shape[1]])
  
         loopParams = [self.index,\
                       self.xWeights,\
@@ -111,7 +112,8 @@ class RNN(Layer):
                       self.yBias, \
                       inLayer.activations, \
                       self.h, \
-                      tf.zeros([44, inLayer.shape[1]], dtype=tf.float32)\
+                      self.y
+#                      tf.zeros([44, inLayer.shape[1]], dtype=tf.float32)\
                     ]
 
         def updateLoopBody(idx, xW, xB, hW, hB, yW, yB, x, h, y):
