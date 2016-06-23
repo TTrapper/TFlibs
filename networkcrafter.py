@@ -132,9 +132,10 @@ class RNN(Layer):
         self.hBias = tf.Variable(tf.zeros([nNodes]))
         self.yBias = tf.Variable(tf.zeros([nOut]))
 
-        self.h = tf.zeros([1, nNodes])
+        self.h = tf.zeros([1, nNodes], name='hState')
 
-        self.index = tf.constant(0, dtype=tf.int32)   
+        self.index = tf.constant(0, dtype=tf.int32, name='loopCount')   
+
  
         loopParams = [self.index,\
                       self.xWeights,\
@@ -145,10 +146,11 @@ class RNN(Layer):
                       self.yBias, \
                       inLayer.activations, \
                       self.h, \
-                      tf.zeros([1, inLayer.shape[1]], dtype=tf.float32)]
+                      tf.zeros([7, inLayer.shape[1]], dtype=tf.float32)\
+#                      [] \
+                    ]
 
         def updateLoopBody(idx, xW, xB, hW, hB, yW, yB, x, h, y):
-
             x_t = tf.slice(x, [idx, 0], [1, -1])
 
             uX = tf.matmul(x_t, xW) + xB
@@ -156,19 +158,22 @@ class RNN(Layer):
             h = tf.tanh(uX + uH)
 
             y_t = tf.matmul(h, yW) + yB
+            y = tf.slice(tf.concat(0, [y, y_t]), [1, 0], [-1, -1])
+#            y = tf.concat(0, [y, y_t])
 
-            y = tf.concat(0, [y, y_t])
             idx = tf.add(idx, 1)
 
-            return idx, xW, xB, hW, hB, yW, yB, x, h, y
-           # return idx, xW, xB, hW, hB, yW, yB, x, h, tf.slice(y, [1,0], [-1, -1])
+            return idx, xW, xB, hW, hB, yW, yB, x, h, y 
+            #return idx, xW, xB, hW, hB, yW, yB, x, h, tf.slice(y, [1,0], [-1, -1])
 
         condition = lambda idx, xW, xB, hW, hB, yW, yB, x, h, y: tf.less(idx, tf.shape(x)[0])
         updateLoop = tf.while_loop(condition, updateLoopBody, loopParams)
 
-        activations = activationFunction(tf.slice(updateLoop[-1], [1,0], [-1, -1]))
+        #activations = activationFunction(tf.slice(updateLoop[-1], [1,0], [-1, -1]))
 
-        #activations = activationFunction(updateLoop[-1])
+        activations = activationFunction(updateLoop[-1])
+
+#        activations = tf.slice(updateLoop[-1], [1, 0], [-1, -1])
         """
         # Hidden state
         self.h = tf.placeholder(tf.float32, shape=[1, nNodes], name='hS')

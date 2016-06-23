@@ -5,7 +5,7 @@ tf = nc.tf
 trainingSequence = 'the quick brown fox jumps over the lazy dog'
 #trainingSequence = 'a b c d e f g h i j k l m n o p q r s t u v w x y z'
 #trainingSequence='abcdefghijklmnopqrstuvwxyz'
-#trainingSequence='aaaab'
+trainingSequence='aaaaab'
 
 # Add special START and STOP chars to the sequence
 trainingSequence = list('#'+trainingSequence+'$')
@@ -18,7 +18,7 @@ uniques = list(set(trainingSequence))
 for letter in trainingSequence:
     trainingNums.append(uniques.index(letter))
 
-# Dictionary gets us the chars back
+# Dictionary gets us the chars back from ints
 num2Char = dict(zip(trainingNums, trainingSequence))
 
 # Target array and source array, offset by 1
@@ -43,7 +43,7 @@ y_ = tf.placeholder(tf.float32, shape=[None, NUM_CHARS])
 sess = tf.InteractiveSession()
 
 
-writer = tf.train.SummaryWriter("./tensorlog", sess.graph_def)
+writer = tf.train.SummaryWriter("./tensorlog", sess.graph)
 sess.run(tf.initialize_all_variables())
 feed = {inLayer.activations:onehot_sources, y_:onehot_targets}
 
@@ -52,8 +52,10 @@ print act
 print act.shape
 print onehot_sources.shape
 print onehot_targets.shape
+
+
 cross_entropy = -tf.reduce_sum(y_*tf.log(rnnLayer.activations))
-mean_square = tf.reduce_mean((y_-rnnLayer.activations)**2)
+#mean_square = tf.reduce_mean((y_-rnnLayer.activations)**2)
 
 train_step = tf.train.AdamOptimizer(1e-5).minimize(cross_entropy)
 #train_step = tf.train.AdamOptimizer(1e-3).minimize(mean_square)
@@ -62,70 +64,19 @@ train_step = tf.train.AdamOptimizer(1e-5).minimize(cross_entropy)
 correct_prediction = tf.equal(tf.argmax(rnnLayer.activations, 1), tf.argmax(y_,1))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
-x = tf.Variable(tf.ones([1,4]))
-x = tf.Variable(tf.constant([[1,1],[2,2],[0,0]], dtype=tf.int32))
-loopy = nc.loopTry(x)
-
-
-
 sess = tf.InteractiveSession()
-
-
-writer = tf.train.SummaryWriter("./tensorlog", sess.graph_def)
+writer = tf.train.SummaryWriter("./tensorlog", sess.graph)
 sess.run(tf.initialize_all_variables())
-
-print sess.run(loopy)
-print x.eval(session=sess)
 
 feed = {inLayer.activations:onehot_sources, y_:onehot_targets}
 
-print sess.run(rnnLayer.activations, feed_dict=feed)
-for i in range(1000):
+for i in range(10000):
    
     train_step.run(feed_dict=feed)
 
     if i%10 == 0:
-        print sess.run(rnnLayer.activations, feed_dict=feed)
+        print [num2Char[num] for num in np.argmax(sess.run(rnnLayer.activations, feed_dict=feed), axis=1)]
     
-
-for i in range(1000):
-        
-    for j in range(targets.shape[0]):
-        source = onehot_sources[j]
-        target = onehot_targets[j]
-        source.shape = 1, source.shape[0]
-        target.shape = 1, target.shape[0]
-        """
-        if j == 0:
-            h = rnnLayer.getZeroState()
-        else:
-            h = rnnLayer.getCurrentState(prevSource, h, sess)
-        """
-#        train_step.run(feed_dict={inLayer.activations:source, y_:target, rnnLayer.h:h})
-        train_step.run(feed_dict={inLayer.activations:source, y_:target})
-        prevSource = source 
-     
-#    rnnLayer.resetHiddenState(sess)
-    
-    if i%10 == 0:
-                
-        answer_fed = [trainingSequence[0]]
-        for j in range(targets.shape[0]):
-            
-            source = onehot_sources[j]
-            source.shape = 1, source.shape[0]
-            """
-            if j == 0:
-                h = rnnLayer.getZeroState()
-            else:
-                h = rnnLayer.getCurrentState(prevSource, h, sess)
-            """
-            #answer_fed.append(num2Char[np.argmax(sess.run(rnnLayer.activations, feed_dict={inLayer.activations:source, rnnLayer.h:h}))])
-            answer_fed.append(num2Char[np.argmax(sess.run(rnnLayer.activations, feed_dict={inLayer.activations:source}))])
-        
-        prevSource = source
-        print ''.join(answer_fed).replace('{', ' ')
-
 
 """
 #    rnnLayer.resetHiddenState(sess)
