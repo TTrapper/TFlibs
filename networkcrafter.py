@@ -82,33 +82,37 @@ class RNN(Layer):
     def __init__(self, inLayer, nNodes, nOut, activationFunction, dropout=False):
         
         self.inLayer = inLayer
-
+        
+        # Weight matrices. x: input hidden, h: recurrent hidden, y: output 
         self.xW = tf.Variable(tf.truncated_normal([inLayer.shape[1], nNodes], stddev=0.1))
         self.hW = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
         self.yW = tf.Variable(tf.truncated_normal([nNodes, nOut], stddev=0.1))
-
+        # Biases
         self.xB = tf.Variable(tf.zeros([nNodes]))
         self.hB = tf.Variable(tf.zeros([nNodes]))
         self.yB = tf.Variable(tf.zeros([nOut]))
-
+        
+        # Hidden state/memory
         self.h = tf.zeros([1, nNodes], name='hState')
+        # Input portion of hidden state updates
+        xUpdates = tf.matmul(inLayer.activations, self.xW) + self.xB       
 
+        # Loop counter
         self.index = tf.constant(0, dtype=tf.int32, name='loopCount')   
- 
         loopParams = [self.index,\
-                      inLayer.activations, \
+                      xUpdates, \
                       self.h, \
                       tf.zeros([tf.shape(inLayer.activations)[0], inLayer.shape[1]], dtype=tf.float32)]
 
-        # Each iteration of the loop-body performs one step of RNN execution
+        # Each iteration of the loop-body performs one step of RNN update and output
         def updateLoopBody(idx, x, h, y):
+            # Grab weighted representation of the current input
             x_t = tf.slice(x, [idx, 0], [1, -1])
-
-            # Hidden layer is updated with by input connections and recurrent connections
-            uX = tf.matmul(x_t, self.xW) + self.xB
+            # Update the hidden state with recurrent connections and inputs
             uH = tf.matmul(h, self.hW) + self.hB
-            h = tf.tanh(uX + uH)
+            h = tf.tanh(x_t + uH)
 
+            # Output at this timestep
             y_t = tf.matmul(h, self.yW) + self.yB
 
             # This is awkward. A hacky way of getting y to have the same shape as the targets.
@@ -124,7 +128,7 @@ class RNN(Layer):
         condition = lambda idx, x, h, y: tf.less(idx, tf.shape(x)[0])
         updateLoop = tf.while_loop(condition, updateLoopBody, loopParams)
 
-        activations = activationFunction(updateLoop[-1])
+        activations = activationFunction(updateLoop[-1]) 
 
         Layer.__init__(self, [nNodes, nOut], activations, dropout)
    
