@@ -2,13 +2,13 @@ import networkcrafter as nc
 import numpy as np
 tf = nc.tf
 
-#trainingSequence = 'the quick brown fox jumps over the lazy dog'
-trainingSequence = 'a b c d e f g h i j k l m n o p q r s t u v w x y z'
+trainingSequence = 'The quick brown fox jumps over the lazy dog.'
+#trainingSequence = 'a b c d e f g h i j k l m n o p q r s t u v w x y z'
 #trainingSequence='abcdefghijklmnopqrstuvwxyz'
 #trainingSequence='aaaaab'
 
 # Add special START and STOP chars to the sequence
-trainingSequence = list('#'+trainingSequence+'$')
+trainingSequence = list('#'+trainingSequence)
 print trainingSequence
 
 NUM_CHARS = len(set(trainingSequence))
@@ -41,11 +41,7 @@ rnnLayer = nc.RNN(inLayer, 100, NUM_CHARS, tf.nn.softmax)
 y_ = tf.placeholder(tf.float32, shape=[None, NUM_CHARS])
 
 cross_entropy = -tf.reduce_sum(y_*tf.log(rnnLayer.activations))
-#mean_square = tf.reduce_mean((y_-rnnLayer.activations)**2)
-
 train_step = tf.train.AdamOptimizer(1e-5).minimize(cross_entropy)
-#train_step = tf.train.AdamOptimizer(1e-3).minimize(mean_square)
-#train_step = tf.train.GradientDescentOptimizer(1).minimize(mean_square)
 
 correct_prediction = tf.equal(tf.argmax(rnnLayer.activations, 1), tf.argmax(y_,1))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
@@ -54,7 +50,7 @@ sess = tf.InteractiveSession()
 writer = tf.train.SummaryWriter("./tensorlog", sess.graph)
 sess.run(tf.initialize_all_variables())
 
-feed = {inLayer.activations:onehot_sources, y_:onehot_targets, rnnLayer.y:onehot_targets}
+feed = {inLayer.activations:onehot_sources, y_:onehot_targets}
 
 for i in range(10000):
    
