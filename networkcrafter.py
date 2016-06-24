@@ -83,51 +83,45 @@ class RNN(Layer):
         
         self.inLayer = inLayer
 
-        self.xWeights = tf.Variable(tf.truncated_normal([inLayer.shape[1], nNodes], stddev=0.1))
-        self.hWeights = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
-        self.yWeights = tf.Variable(tf.truncated_normal([nNodes, nOut], stddev=0.1))
+        self.xW = tf.Variable(tf.truncated_normal([inLayer.shape[1], nNodes], stddev=0.1))
+        self.hW = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
+        self.yW = tf.Variable(tf.truncated_normal([nNodes, nOut], stddev=0.1))
 
-        self.xBias = tf.Variable(tf.zeros([nNodes]))
-        self.hBias = tf.Variable(tf.zeros([nNodes]))
-        self.yBias = tf.Variable(tf.zeros([nOut]))
+        self.xB = tf.Variable(tf.zeros([nNodes]))
+        self.hB = tf.Variable(tf.zeros([nNodes]))
+        self.yB = tf.Variable(tf.zeros([nOut]))
 
         self.h = tf.zeros([1, nNodes], name='hState')
 
         self.index = tf.constant(0, dtype=tf.int32, name='loopCount')   
  
         loopParams = [self.index,\
-                      self.xWeights,\
-                      self.xBias, \
-                      self.hWeights, \
-                      self.hBias, \
-                      self.yWeights, \
-                      self.yBias, \
                       inLayer.activations, \
                       self.h, \
                       tf.zeros([tf.shape(inLayer.activations)[0], inLayer.shape[1]], dtype=tf.float32)]
 
         # Each iteration of the loop-body performs one step of RNN execution
-        def updateLoopBody(idx, xW, xB, hW, hB, yW, yB, x, h, y):
+        def updateLoopBody(idx, x, h, y):
             x_t = tf.slice(x, [idx, 0], [1, -1])
 
             # Hidden layer is updated with by input connections and recurrent connections
-            uX = tf.matmul(x_t, xW) + xB
-            uH = tf.matmul(h, hW) + hB
+            uX = tf.matmul(x_t, self.xW) + self.xB
+            uH = tf.matmul(h, self.hW) + self.hB
             h = tf.tanh(uX + uH)
 
-            y_t = tf.matmul(h, yW) + yB
+            y_t = tf.matmul(h, self.yW) + self.yB
 
-            # This is awkward. A hacky way of getting y to have the same shape coming in as out
+            # This is awkward. A hacky way of getting y to have the same shape as the targets.
             def firstIteration(): return y_t
             def nextIterations(): return tf.concat(0, [y, y_t])
             y = tf.cond(tf.equal(0, idx), firstIteration, nextIterations)
     
             idx = tf.add(idx, 1)
 
-            return idx, xW, xB, hW, hB, yW, yB, x, h, y            
+            return idx, x, h, y            
 
         # The update loop runs for each example in the batch.
-        condition = lambda idx, xW, xB, hW, hB, yW, yB, x, h, y: tf.less(idx, tf.shape(x)[0])
+        condition = lambda idx, x, h, y: tf.less(idx, tf.shape(x)[0])
         updateLoop = tf.while_loop(condition, updateLoopBody, loopParams)
 
         activations = activationFunction(updateLoop[-1])
