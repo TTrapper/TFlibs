@@ -8,16 +8,15 @@ trainingSequence = 'The quick brown fox jumps over the lazy dog. The dog doesn\'
 #trainingSequence='abcdefghijklmnopqrstuvwxyz'
 #trainingSequence='aaaaab'
 
-# Add special START and STOP chars to the sequence
+# Add a START character to the front of the sequence. Targets will begin with next character.
 trainingSequence = list('#'+trainingSequence)
 print trainingSequence
 
-NUM_CHARS = len(set(trainingSequence))
 # Map chars to ints
+NUM_CHARS = len(set(trainingSequence))
 trainingNums = []
 uniques = list(set(trainingSequence))
-for letter in trainingSequence:
-    trainingNums.append(uniques.index(letter))
+[trainingNums.append(uniques.index(letter)) for letter in trainingSequence]
 
 # Dictionary gets us the chars back from ints
 num2Char = dict(zip(trainingNums, trainingSequence))
