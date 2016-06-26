@@ -79,59 +79,62 @@ class ReshapeLayer(Layer):
 
 class RNN(Layer):
 
-    def __init__(self, inLayer, nNodes, nOut, activationFunction, dropout=False):
+    def __init__(self, inLayer, nNodes, dropout=False):
         
         self.inLayer = inLayer
         
         # Weight matrices. x: input hidden, h: recurrent hidden, y: output 
         self.xW = tf.Variable(tf.truncated_normal([inLayer.shape[1], nNodes], stddev=0.1))
         self.hW = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
-        self.yW = tf.Variable(tf.truncated_normal([nNodes, nOut], stddev=0.1))
+
         # Biases
         self.xB = tf.Variable(tf.zeros([nNodes]))
         self.hB = tf.Variable(tf.zeros([nNodes]))
-        self.yB = tf.Variable(tf.zeros([nOut]))
         
         # Hidden state/memory
-        self.h = tf.zeros([1, nNodes], name='hState')
-        # Input portion of hidden state updates
-        xUpdates = tf.matmul(inLayer.activations, self.xW) + self.xB       
+        self.h = tf.Variable(tf.zeros([1, nNodes]))
+
+        # Get a new representation of the inputs using weights
+        xUpdates = tf.matmul(inLayer.activations, self.xW) + self.xB
 
         # Loop counter
-        self.index = tf.constant(0, dtype=tf.int32, name='loopCount')   
+        self.index = tf.constant(0, dtype=tf.int32) 
         loopParams = [self.index,\
                       xUpdates, \
                       self.h, \
-                      tf.zeros([tf.shape(inLayer.activations)[0], inLayer.shape[1]], dtype=tf.float32)]
-
-        # Each iteration of the loop-body performs one step of RNN update and output
-        def updateLoopBody(idx, x, h, y):
+                      tf.zeros([tf.shape(inLayer.activations)[0], nNodes], dtype=tf.float32)]
+                      
+        # Each iteration performs one step of RNN update, produces series of hidden states
+        def updateLoopBody(idx, x, h, activations):
             # Grab weighted representation of the current input
             x_t = tf.slice(x, [idx, 0], [1, -1])
+            
             # Update the hidden state with recurrent connections and inputs
             uH = tf.matmul(h, self.hW) + self.hB
-            h = tf.tanh(x_t + uH)
+            h = tf.tanh(x_t + uH) 
 
-            # Output at this timestep
-            y_t = tf.matmul(h, self.yW) + self.yB
-
-            # This is awkward. A hacky way of getting y to have the same shape as the targets.
-            def firstIteration(): return y_t
-            def nextIterations(): return tf.concat(0, [y, y_t])
-            y = tf.cond(tf.equal(0, idx), firstIteration, nextIterations)
+            # This is an awkward way of getting activations to have the same shape as the targets.
+            def firstIteration(): return h
+            def nextIterations(): return tf.concat(0, [activations, h])
+            activations = tf.cond(tf.equal(0, idx), firstIteration, nextIterations)
     
             idx = tf.add(idx, 1)
 
-            return idx, x, h, y            
+            return idx, x, h, activations
 
         # The update loop runs for each example in the batch.
-        condition = lambda idx, x, h, y: tf.less(idx, tf.shape(x)[0])
+        condition = lambda idx, x, h, activations: tf.less(idx, tf.shape(x)[0])
         updateLoop = tf.while_loop(condition, updateLoopBody, loopParams)
 
-        activations = activationFunction(updateLoop[-1]) 
+        # A time series of the RNN's hidden state accross each input example
+        activations = updateLoop[-1]
 
-        Layer.__init__(self, [nNodes, nOut], activations, dropout)
-   
+        Layer.__init__(self, [nNodes, nNodes], activations, dropout)
+  
+    def resetHiddenLayer(self):
+        self.h = tf.Variable(tf.zeros([1, self.shape[0]]))
+
+ 
 class Network:
 
     def inputLayer(self, nFeatures, dropout=False):
@@ -153,7 +156,10 @@ class Network:
 
     def reshapeLayer(self, newShape, dropout=False):
         self.__addLayer__(ReshapeLayer(self.outLayer, newShape, dropout))
-    
+   
+    def rnnLayer(self, nNodes, dropout=False):
+        self.__addLayer__(RNN(self.outLayer, nNodes, dropout))
+ 
     def __addLayer__(self, layer):
         self.layers.append(layer)
         self.hiddens.append(layer)
@@ -173,7 +179,7 @@ class Network:
 
         return sess.run(self.outLayer.activations, feed_dict=feedDict)        
         
-    def getFeedDict(self, inputs, keepProb, extras={}):
+    def getFeedDict(self, inputs, keepProb=1, extras={}):
 
         """Create a feed dicionary for tensorflow. 
 
@@ -192,6 +198,11 @@ class Network:
 
         feedDict.update(extras)
         return feedDict
+
+    def resetRecurrentHiddens(self):
+        for layer in self.layers:
+            if type(layer) is RNN:
+                layer.resetHiddenLayer()
 
 class MLP(Network):
 
