@@ -46,7 +46,8 @@ else:
 # The RNN
 network = nc.Network()
 network.inputLayer(NUM_CHARS)
-network.rnnLayer(100)
+#network.rnnLayer(100)
+network.gruLayer(100)
 network.fullConnectLayer(NUM_CHARS, tf.nn.softmax)
 
 y_ = tf.placeholder(tf.float32, shape=[None, NUM_CHARS])

@@ -94,13 +94,13 @@ class RNN(Layer):
         # Hidden state/memory
         self.h = tf.Variable(tf.zeros([1, nNodes]))
 
-        # Get a new representation of the inputs using weights
-        xUpdates = tf.matmul(inLayer.activations, self.xW) + self.xB
+        # Using trainable weights, get a new representation of inputs with same dimension as h
+        xTransform = tf.matmul(inLayer.activations, self.xW) + self.xB
 
         # Loop counter
         self.index = tf.constant(0, dtype=tf.int32) 
         loopParams = [self.index,\
-                      xUpdates, \
+                      xTransform, \
                       self.h, \
                       tf.zeros([tf.shape(inLayer.activations)[0], nNodes], dtype=tf.float32)]
                       
@@ -112,6 +112,84 @@ class RNN(Layer):
             # Update the hidden state with recurrent connections and inputs
             uH = tf.matmul(h, self.hW) + self.hB
             h = tf.tanh(x_t + uH) 
+
+            # This is an awkward way of getting activations to have the same shape as the targets.
+            def firstIteration(): return h
+            def nextIterations(): return tf.concat(0, [activations, h])
+            activations = tf.cond(tf.equal(0, idx), firstIteration, nextIterations)
+    
+            idx = tf.add(idx, 1)
+
+            return idx, x, h, activations
+
+        # The update loop runs for each example in the batch.
+        condition = lambda idx, x, h, activations: tf.less(idx, tf.shape(x)[0])
+        updateLoop = tf.while_loop(condition, updateLoopBody, loopParams)
+
+        # A time series of the RNN's hidden state accross each input example
+        activations = updateLoop[-1]
+
+        Layer.__init__(self, [nNodes, nNodes], activations, dropout)
+  
+    def resetHiddenLayer(self):
+        self.h = tf.Variable(tf.zeros([1, self.shape[0]]))
+
+
+def GRU(Layer):
+ 
+    def __init__( inLayer, nNodes, dropout=False):
+        
+        inLayer = inLayer
+        
+        # Weight matrices. x: input hidden, h: recurrent hidden, y: output 
+        xW = tf.Variable(tf.truncated_normal([inLayer.shape[1], nNodes], stddev=0.1))
+        hW = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
+        # Update gate weights
+        xUW = tf.Variable(tf.truncated_normal([inLayer.shape[1], nNodes], stddev=0.1))
+        hUW = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
+        # Reset gate weights
+        xRW = tf.Variable(tf.truncated_normal([inLayer.shape[1], nNodes], stddev=0.1))
+        hRW = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
+
+        # Biases
+        xB = tf.Variable(tf.zeros([nNodes]))
+        hB = tf.Variable(tf.zeros([nNodes]))
+                
+        xUB = tf.Variable(tf.zeros([nNodes]))
+        hUB = tf.Variable(tf.zeros([nNodes]))
+
+        xRB = tf.Variable(tf.zeros([nNodes]))
+        hRB = tf.Variable(tf.zeros([nNodes]))
+        
+        # Hidden state/memory
+        self.h = tf.Variable(tf.zeros([1, nNodes]))
+
+        # Create [nIn x nNode] dimensional representations of x input with trainable weights
+        xTransform = tf.matmul(inLayer.activations, xW) + xB
+        xUpdates = tf.matmul(inLayer.activations, xUW) + xUB
+        xResets = tf.matmul(inLayer.activations, xRW) + xRB
+
+        # Loop counter
+        index = tf.constant(0, dtype=tf.int32) 
+        loopParams = [index,\
+                      xTransform,\
+                      self.h, \
+                      tf.zeros([tf.shape(inLayer.activations)[0], nNodes], dtype=tf.float32)]
+                      
+        # Each iteration performs one step of RNN update, produces series of hidden states
+        def updateLoopBody(idx, x, h, activations):
+            # Grab weighted representation of the current input
+            x_t = tf.slice(x, [idx, 0], [1, -1])
+            xU_t = tf.slice(xUpdates, [idx, 0], [1, -1])
+            xR_t = tf.slice(xResets, [idx, 0], [1, -1])
+
+            # Reset and update gates
+            u = tf.nn.sigmoid((tf.matmul(xU_t, xUW) + xUB) + (tf.matmul(h, hUW) + hUB))
+            r = tf.nn.sigmoid((tf.matmul(xR_t, xRW) + xRB) + (tf.matmul(h, hRW) + hRB))           
+
+            # Compute new h value, 
+            hCandidate = tf.tanh(x_t + tf.matmul(hW, tf.mul(r, h)))
+            h = tf.tanh(tf.mul((1-u), hCandidate) + tf.mul(u, hCandidate) + hB) 
 
             # This is an awkward way of getting activations to have the same shape as the targets.
             def firstIteration(): return h
@@ -160,6 +238,9 @@ class Network:
     def rnnLayer(self, nNodes, dropout=False):
         self.__addLayer__(RNN(self.outLayer, nNodes, dropout))
  
+    def gruLayer(self, nNodes, dropout=False):
+        self.__addLayer__(RNN(self.outLayer, nNodes, dropout))
+    
     def __addLayer__(self, layer):
         self.layers.append(layer)
         self.hiddens.append(layer)
