@@ -3,21 +3,25 @@ import tensorflow as tf
 
 class Layer:
 
-    def __init__(self, shape, activations, dropout=False):
+    def __init__(self, shape, weightedInputs, activationFunction=None, dropout=False):
         """
         shape -- the shape of the weights on this layer
         activations -- the output values of this layer, may be a tf.placeholder or tensor
         dropout -- whether or not dropout is to be applied to this layer
         """
 
-        if not isinstance(activations, tf.Tensor):
+        # Apply activation function
+        if activationFunction is not None:
+            self.activations = activationFunction(weightedInputs)
+        else:
+            self.activations = weightedInputs
+          
+        if not isinstance(self.activations, tf.Tensor):
             raise TypeError("A layer's activations must be of type TensorFlow.Tensor.")
 
         self.shape = shape
-        self.activations = activations
 
         self.applyDropout = dropout       
-
         if dropout is True:
             self.keepProb = tf.placeholder(tf.float32) 
             self.activations = tf.nn.dropout(self.activations, self.keepProb)
@@ -29,25 +33,20 @@ class InputLayer(Layer):
         shape = [None, nFeatures]
         activations = tf.placeholder(tf.float32, shape=shape, name='xin')
        
-        Layer.__init__(self, shape, activations, dropout)
+        Layer.__init__(self, shape, activations, dropout=dropout)
 
 
 class FullConnectLayer(Layer):
 
-    def __init__(self, inLayer, nNodes, activationFunction=None, dropout=False):
+    def __init__(self, inLayer, nNodes, activationFunction, dropout=False):
         
         shape = [inLayer.shape[1], nNodes]
         self.weights = tf.Variable(tf.random_normal(shape, stddev=0.1 ))
         self.biases = tf.Variable(tf.constant(0.1, dtype=tf.float32, shape=[nNodes]))
 
         weightedInput = tf.matmul(inLayer.activations, self.weights) + self.biases
-        
-        if activationFunction is not None:
-            activations = activationFunction(weightedInput)
-        else:
-            activations = weightedInput
-        
-        Layer.__init__(self, shape, activations, dropout)
+         
+        Layer.__init__(self, shape, weightedInput, activationFunction, dropout=dropout)
 
 
 class ConvLayer(Layer):
@@ -59,9 +58,8 @@ class ConvLayer(Layer):
 
         conv = tf.nn.conv2d(inLayer.activations, self.weights, strides, padding='SAME') + \
             self.biases
-        activations = activationFunction(conv)
      
-        Layer.__init__(self, filterSize, activations, dropout)
+        Layer.__init__(self, filterSize, conv, activationFunction, dropout=dropout)
 
         
 class PoolLayer(Layer):
@@ -70,7 +68,7 @@ class PoolLayer(Layer):
         
         activations = poolType(inLayer.activations, ksize=poolSize, strides=strides, padding='SAME')
 
-        Layer.__init__(self, poolSize, activations, dropout)
+        Layer.__init__(self, poolSize, activations, dropout=dropout)
 
 
 class ReshapeLayer(Layer):
@@ -78,7 +76,7 @@ class ReshapeLayer(Layer):
     def __init__(self, inLayer, newShape, dropout=False):
         activations = tf.reshape(inLayer.activations, newShape);
         
-        Layer.__init__(self, newShape, activations, dropout)
+        Layer.__init__(self, newShape, activations, dropout=dropout)
 
 
 class RNN(Layer):
@@ -88,7 +86,7 @@ class RNN(Layer):
         self.inLayer = inLayer
         
         # Inputs get re-represented in same dimensions as hidden state
-        xTransform = FullConnectLayer(inLayer, nNodes).activations
+        xTransform = FullConnectLayer(inLayer, nNodes, None).activations
  
         # Weights for recurrent connection
         self.hW = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
@@ -110,19 +108,20 @@ class RNN(Layer):
 
         activations = tf.scan(scanInputs, xTransform, initializer=self.h)
 
-        Layer.__init__(self, [nNodes, nNodes], activations, dropout)
+        Layer.__init__(self, [nNodes, nNodes], activations, dropout=dropout)
   
     def resetHiddenLayer(self):
-        self.h = tf.Variable(tf.zeros([self.shape[0]]))
+        self.h.assign(tf.zeros([self.shape[0]]))
+
 
 def GRU(Layer):
  
     def __init__( inLayer, nNodes, dropout=False):
         
         # Rerepresent inputs with same Dims as hidden state. Also reset and input gates.
-        xTransform = FullConnectLayer(inLayer, nNodes).activations
-        xResets = FullConnectLayer(inLayer, nNodes).activations
-        xUpdates = FullConnectLayer(inLayer, nNodes).activations
+        xTransform = FullConnectLayer(inLayer, nNodes, None).activations
+        xResets = FullConnectLayer(inLayer, nNodes, None).activations
+        xUpdates = FullConnectLayer(inLayer, nNodes, None).activations
 
         # Recurrent weights, update and reset weights
         hW = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
@@ -173,10 +172,10 @@ def GRU(Layer):
         # A time series of the RNN's hidden state accross each input example
         activations = updateLoop[-1]
 
-        Layer.__init__(self, [nNodes, nNodes], activations, dropout)
+        Layer.__init__(self, [nNodes, nNodes], activations, dropout=dropout)
   
     def resetHiddenLayer(self):
-        self.h = tf.Variable(tf.zeros([1, self.shape[0]]))
+        self.h.assign(tf.Variable(tf.zeros([1, self.shape[0]])))
 
  
 class Network:
