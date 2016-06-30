@@ -4,11 +4,6 @@ import tensorflow as tf
 class Layer:
 
     def __init__(self, shape, weightedInputs, activationFunction=None, dropout=False):
-        """
-        shape -- the shape of the weights on this layer
-        activations -- the output values of this layer, may be a tf.placeholder or tensor
-        dropout -- whether or not dropout is to be applied to this layer
-        """
 
         # Apply activation function
         if activationFunction is not None:
