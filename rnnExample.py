@@ -36,12 +36,11 @@ for i in range(len(sources)):
 # Create lists of source/target batches
 BATCH_SIZE = 100
 if sources.shape[0] > BATCH_SIZE:
-    onehot_targets = np.split(onehot_targets, range(0, sources.shape[0], BATCH_SIZE))
-    onehot_sources = np.split(onehot_sources, range(0, sources.shape[0], BATCH_SIZE))
+    onehot_targets = np.split(onehot_targets, range(BATCH_SIZE, sources.shape[0], BATCH_SIZE))
+    onehot_sources = np.split(onehot_sources, range(BATCH_SIZE, sources.shape[0], BATCH_SIZE))
 else:
     onehot_targets = [onehot_targets]
     onehot_sources = [onehot_sources]
-
 
 # The RNN
 network = nc.Network()
