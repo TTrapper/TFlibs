@@ -88,8 +88,7 @@ class RNN(Layer):
         self.inLayer = inLayer
         
         # Inputs get re-represented in same dimensions as hidden state
-        xLayer = FullConnectLayer(inLayer, nNodes)
-        xTransform = xLayer.activations
+        xTransform = FullConnectLayer(inLayer, nNodes).activations
  
         # Weights for recurrent connection
         self.hW = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
@@ -98,6 +97,7 @@ class RNN(Layer):
         # Hidden state/memory
         self.h = tf.Variable(tf.zeros([nNodes]))
 
+        # Function used by scan, applied to each input example
         def scanInputs(h,x):
             # Need to add a dim to h so we can apply matrix multiplication (recurrent update)
             h_row = tf.expand_dims(h,0)
@@ -119,35 +119,23 @@ def GRU(Layer):
  
     def __init__( inLayer, nNodes, dropout=False):
         
-        inLayer = inLayer
-        
-        # Weight matrices. x: input hidden, h: recurrent hidden, y: output 
-        xW = tf.Variable(tf.truncated_normal([inLayer.shape[1], nNodes], stddev=0.1))
+        # Rerepresent inputs with same Dims as hidden state. Also reset and input gates.
+        xTransform = FullConnectLayer(inLayer, nNodes).activations
+        xResets = FullConnectLayer(inLayer, nNodes).activations
+        xUpdates = FullConnectLayer(inLayer, nNodes).activations
+
+        # Recurrent weights, update and reset weights
         hW = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
-        # Update gate weights
-        xUW = tf.Variable(tf.truncated_normal([inLayer.shape[1], nNodes], stddev=0.1))
         hUW = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
-        # Reset gate weights
-        xRW = tf.Variable(tf.truncated_normal([inLayer.shape[1], nNodes], stddev=0.1))
         hRW = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
 
         # Biases
-        xB = tf.Variable(tf.zeros([nNodes]))
         hB = tf.Variable(tf.zeros([nNodes]))
-                
-        xUB = tf.Variable(tf.zeros([nNodes]))
         hUB = tf.Variable(tf.zeros([nNodes]))
-
-        xRB = tf.Variable(tf.zeros([nNodes]))
         hRB = tf.Variable(tf.zeros([nNodes]))
         
         # Hidden state/memory
         self.h = tf.Variable(tf.zeros([1, nNodes]))
-
-        # Create [nIn x nNode] dimensional representations of x input with trainable weights
-        xTransform = tf.matmul(inLayer.activations, xW) + xB
-        xUpdates = tf.matmul(inLayer.activations, xUW) + xUB
-        xResets = tf.matmul(inLayer.activations, xRW) + xRB
 
         # Loop counter
         index = tf.constant(0, dtype=tf.int32) 
@@ -175,10 +163,8 @@ def GRU(Layer):
             def firstIteration(): return h
             def nextIterations(): return tf.concat(0, [activations, h])
             activations = tf.cond(tf.equal(0, idx), firstIteration, nextIterations)
-    
-            idx = tf.add(idx, 1)
 
-            return idx, x, h, activations
+            return idx+1, x, h, activations
 
         # The update loop runs for each example in the batch.
         condition = lambda idx, x, h, activations: tf.less(idx, tf.shape(x)[0])
