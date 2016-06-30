@@ -2,7 +2,8 @@ import networkcrafter as nc
 import numpy as np
 tf = nc.tf
 
-#trainingSequence = 'The quick brown fox jumps over the lazy dog.'
+trainingSequence = 'The quick brown fox jumps over the lazy dog.'
+#trainingSequence = 'The quick brown fox jumps over the lazy dog. The dog doesn\'t care much, so she decides that next time the fox jumps over her, she\'s going to be asleep. Later on, the fox did jump over the dog and, seeing no surprise in the in her whatsoever, felt annoyed. The fox, quick as it was, pounce on the dog and nipped her ear before sprinting off into the forest. Foxes are sly, but dogs are keen. The dog, now having been awaken from her slumber, had been keened indeed. It was time for a game. A game that not only used all of the letters, but would also decide who among them was the better hunter, hider, trapper, coniver.'
 trainingSequence = 'The quick brown fox jumps over the lazy dog. The dog doesn\'t care much, so she decides that next time the fox jumps over her, she\'s going to be asleep.'
 #trainingSequence = 'a b c d e f g h i j k l m n o p q r s t u v w x y z'
 #trainingSequence='abcdefghijklmnopqrstuvwxyz'
@@ -34,7 +35,7 @@ for i in range(len(sources)):
     onehot_sources[i,sources[i]] = 1
 
 # Create lists of source/target batches
-BATCH_SIZE = 100
+BATCH_SIZE = 128
 if sources.shape[0] > BATCH_SIZE:
     onehot_targets = np.split(onehot_targets, range(BATCH_SIZE, sources.shape[0], BATCH_SIZE))
     onehot_sources = np.split(onehot_sources, range(BATCH_SIZE, sources.shape[0], BATCH_SIZE))
@@ -45,7 +46,7 @@ else:
 # The RNN
 network = nc.Network()
 network.inputLayer(NUM_CHARS)
-#network.rnnLayer(100)
+network.rnnLayer(100)
 network.gruLayer(100)
 network.fullConnectLayer(NUM_CHARS, tf.nn.softmax)
 

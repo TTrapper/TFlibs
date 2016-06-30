@@ -96,88 +96,24 @@ class RNN(Layer):
         self.hB = tf.Variable(tf.zeros([nNodes]))
         
         # Hidden state/memory
-        self.h = tf.Variable(tf.zeros([1, nNodes]))
+        self.h = tf.Variable(tf.zeros([nNodes]))
 
-        # Loop counter
-        self.index = tf.constant(0, dtype=tf.int32) 
-        loopParams = [self.index,\
-                      xTransform, \
-                      self.h, \
-                      tf.zeros([tf.shape(inLayer.activations)[0], nNodes], dtype=tf.float32)]
-                      
-        # Each iteration performs one step of RNN update, concatenates to series of hidden states
-        def updateLoopBody(idx, x, h, activations):
-            # Grab weighted representation of the current input
-            x_t = tf.slice(x, [idx, 0], [1, -1])
-            
-            # Update the hidden state with recurrent connections and inputs
-            uH = tf.matmul(h, self.hW) + self.hB
-            h = tf.tanh(x_t + uH) 
+        def scanInputs(h,x):
+            # Need to add a dim to h so we can apply matrix multiplication (recurrent update)
+            h_row = tf.expand_dims(h,0)
+            uH = tf.matmul(h_row, self.hW) + self.hB
+            # Add the inputs, squeeze it back to rank 1. Will be packed into a matrix by scan().
+            hPlusX = tf.squeeze(tf.tanh(x + uH))
+            # Keep a record of last hidden state that will persist between calls.
+            self.h.assign(hPlusX)
+            return hPlusX
 
-            # This is an awkward way of getting activations to have the same shape as the targets.
-            def firstIteration(): return h
-            def nextIterations(): return tf.concat(0, [activations, h])
-            activations = tf.cond(tf.equal(0, idx), firstIteration, nextIterations)
-    
-            idx = tf.add(idx, 1)
-
-            return idx, x, h, activations
-
-        # The update loop runs for each example in the batch.
-        condition = lambda idx, x, h, activations: tf.less(idx, tf.shape(x)[0])
-        updateLoop = tf.while_loop(condition, updateLoopBody, loopParams)
-
-        # A time series of the RNN's hidden state accross each input example
-        activations = updateLoop[-1]
+        activations = tf.scan(scanInputs, xTransform, initializer=self.h)
 
         Layer.__init__(self, [nNodes, nNodes], activations, dropout)
   
     def resetHiddenLayer(self):
-        self.h = tf.Variable(tf.zeros([1, self.shape[0]]))
-
-"""
-    RNN Sudo-Tensor-code
-
-    x_in = tf.place_holder()
-    h = tf.Variable(initial_state)
-    h_out = tf.zeros(shape(initial_state))
-
-    # Function defines one iteration of the loop
-    def loopBody(index, x_sequence, h, hidden_sequence):
-
-        # update hidden state
-        x_t = x_sequence[index]
-        h_t = h*hW + bias
-
-        h = tanh(h_t + x_t)
-
-        # Save sequence of hidden states
-        concatenate(hidden_sequence, h)
-        
-        index++
-
-        return index, x_sequence, h, h_sequence
-
-
-    # Function defines the loop condition
-    loop_parameters = [0, x_in, h, h_out]
-    condition = lambda idx, x, h, h_seq: idx < len(x)
-    loop = tf.while_loop(condition, loopBody, loop_parameters)
-
-    # return the sequence of hidden states after loop execution
-    h_sequence = loop[-1]
-
-
-    What I would like: scan
-
-    def scanInputs(h, x):
-
-        return  tanh((x + (h*hW)))
-
-
-    h_sequence = tf.scan(scanInputs, x_in)
-"""
-
+        self.h = tf.Variable(tf.zeros([self.shape[0]]))
 
 def GRU(Layer):
  
