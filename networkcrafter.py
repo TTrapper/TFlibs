@@ -162,8 +162,7 @@ def GRU(Layer):
         condition = lambda idx, x, h, activations: tf.less(idx, tf.shape(x)[0])
         _, _, _, activations = tf.while_loop(condition, updateLoopBody, loopParams)
 
-        activations = activations.concat()
-        Layer.__init__(self, [nNodes, nNodes], activations, dropout=dropout)
+        Layer.__init__(self, [nNodes, nNodes], activations.concat(), dropout=dropout)
   
     def resetHiddenLayer(self):
         self.h.assign(tf.Variable(tf.zeros([1, self.shape[0]])))
