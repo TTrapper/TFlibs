@@ -112,19 +112,21 @@ class RNN(Layer):
 def GRU(Layer):
  
     def __init__( inLayer, nNodes, dropout=False):
+
+        nTimeSteps = tf.shape(inLayer.activations)[0]
         
         # Rerepresent inputs with same Dims as hidden state. Also reset and input gates.
         xTransform = FullConnectLayer(inLayer, nNodes, None).activations
-        xResets = FullConnectLayer(inLayer, nNodes, None).activations
-        xUpdates = FullConnectLayer(inLayer, nNodes, None).activations
+        xResets    = FullConnectLayer(inLayer, nNodes, None).activations
+        xUpdates   = FullConnectLayer(inLayer, nNodes, None).activations
 
         # Recurrent weights, update and reset weights
-        hW = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
+        hW  = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
         hUW = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
         hRW = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
 
         # Biases
-        hB = tf.Variable(tf.zeros([nNodes]))
+        hB  = tf.Variable(tf.zeros([nNodes]))
         hUB = tf.Variable(tf.zeros([nNodes]))
         hRB = tf.Variable(tf.zeros([nNodes]))
         
@@ -136,15 +138,14 @@ def GRU(Layer):
         loopParams = [index,\
                       xTransform,\
                       self.h, \
-                      tf.TensorArray(size=tf.shape(inLayer.activations)[0], dynamic_size=False,\
-                        infer_shape=True)]
+                      tf.TensorArray(size=nTimeSteps, dynamic_size=False, infer_shape=True)]
  
         # Each iteration performs one step of RNN update, produces series of hidden states
         def updateLoopBody(idx, x, h, activations):
             # Grab weighted representation of the current input
-            x_t = tf.slice(x, [idx, 0], [1, -1])
-            xU_t = tf.slice(xUpdates, [idx, 0], [1, -1])
-            xR_t = tf.slice(xResets, [idx, 0], [1, -1])
+            x_t  = xTransform[idx]
+            xU_t = xUpdates[idx]
+            xR_t = xResets[idx]
 
             # Reset and update gates
             u = tf.nn.sigmoid((tf.matmul(xU_t, xUW) + xUB) + (tf.matmul(h, hUW) + hUB))
@@ -159,7 +160,7 @@ def GRU(Layer):
             return idx+1, x, h, activations
 
         # The update loop runs for each example in the batch.
-        condition = lambda idx, x, h, activations: tf.less(idx, tf.shape(x)[0])
+        condition = lambda idx, x, h, activations: tf.less(idx, nTimeSteps)
         _, _, _, activations = tf.while_loop(condition, updateLoopBody, loopParams)
 
         Layer.__init__(self, [nNodes, nNodes], activations.concat(), dropout=dropout)
