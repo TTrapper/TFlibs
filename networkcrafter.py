@@ -136,8 +136,9 @@ def GRU(Layer):
         loopParams = [index,\
                       xTransform,\
                       self.h, \
-                      tf.zeros([tf.shape(inLayer.activations)[0], nNodes], dtype=tf.float32)]
-                      
+                      tf.TensorArray(size=tf.shape(inLayer.activations)[0], dynamic_size=False,\
+                        infer_shape=True)]
+ 
         # Each iteration performs one step of RNN update, produces series of hidden states
         def updateLoopBody(idx, x, h, activations):
             # Grab weighted representation of the current input
@@ -153,20 +154,15 @@ def GRU(Layer):
             hCandidate = tf.tanh(x_t + tf.matmul(hW, tf.mul(r, h)))
             h = tf.tanh(tf.mul((1-u), hCandidate) + tf.mul(u, hCandidate) + hB) 
 
-            # This is an awkward way of getting activations to have the same shape as the targets.
-            def firstIteration(): return h
-            def nextIterations(): return tf.concat(0, [activations, h])
-            activations = tf.cond(tf.equal(0, idx), firstIteration, nextIterations)
+            activations.write(idx, h)
 
             return idx+1, x, h, activations
 
         # The update loop runs for each example in the batch.
         condition = lambda idx, x, h, activations: tf.less(idx, tf.shape(x)[0])
-        updateLoop = tf.while_loop(condition, updateLoopBody, loopParams)
+        _, _, _, activations = tf.while_loop(condition, updateLoopBody, loopParams)
 
-        # A time series of the RNN's hidden state accross each input example
-        activations = updateLoop[-1]
-
+        activations = activations.concat()
         Layer.__init__(self, [nNodes, nNodes], activations, dropout=dropout)
   
     def resetHiddenLayer(self):
