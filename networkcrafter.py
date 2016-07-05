@@ -152,7 +152,7 @@ def GRU(Layer):
 
             # Compute new h value, 
             hCandidate = tf.tanh(x_t + tf.matmul(hW, tf.mul(r, h)))
-            h = tf.tanh(tf.mul((1-u), hCandidate) + tf.mul(u, hCandidate) + hB) 
+            h.assign(tf.tanh(tf.mul((1-u), hCandidate) + tf.mul(u, hCandidate) + hB)) 
 
             activations.write(idx, h)
 
