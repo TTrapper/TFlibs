@@ -136,12 +136,11 @@ def GRU(Layer):
         # Loop counter
         index = tf.constant(0, dtype=tf.int32) 
         loopParams = [index,\
-                      xTransform,\
                       self.h, \
                       tf.TensorArray(size=nTimeSteps, dynamic_size=False, infer_shape=True)]
  
         # Each iteration performs one step of RNN update, produces series of hidden states
-        def updateLoopBody(idx, x, h, activations):
+        def updateLoopBody(idx, h, activations):
             # Grab weighted representation of the current input
             x_t  = xTransform[idx]
             xU_t = xUpdates[idx]
@@ -157,11 +156,11 @@ def GRU(Layer):
 
             activations.write(idx, h)
 
-            return idx+1, x, h, activations
+            return idx+1, h, activations
 
         # The update loop runs for each example in the batch.
-        condition = lambda idx, x, h, activations: tf.less(idx, nTimeSteps)
-        _, _, _, activations = tf.while_loop(condition, updateLoopBody, loopParams)
+        condition = lambda idx, h, activations: tf.less(idx, nTimeSteps)
+        _, _, activations = tf.while_loop(condition, updateLoopBody, loopParams)
 
         Layer.__init__(self, [nNodes, nNodes], activations.concat(), dropout=dropout)
   
