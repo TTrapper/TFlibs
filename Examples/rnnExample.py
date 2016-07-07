@@ -1,4 +1,5 @@
 import TFlibs.networkcrafter as nc
+import PythonTools.charIntTools as cit
 import numpy as np
 tf = nc.tf
 
@@ -10,21 +11,17 @@ trainingSequence = 'The quick brown fox jumps over the lazy dog. The dog doesn\'
 #trainingSequence='aaaaab'
 
 # Add a START character to the front of the sequence. Targets will begin with next character.
-trainingSequence = list('#'+trainingSequence)
 print trainingSequence
+trainingSequence = list(trainingSequence)
 
 # Map chars to ints
-NUM_CHARS = len(set(trainingSequence))
-trainingNums = []
-uniques = list(set(trainingSequence))
-[trainingNums.append(uniques.index(letter)) for letter in trainingSequence]
-
-# Dictionary gets us the chars back from ints
-num2Char = dict(zip(trainingNums, trainingSequence))
+trainingNums, char2Num = cit.intListFromString(trainingSequence)
+num2Char = cit.swapDictionary(char2Num)
+NUM_CHARS = len(num2Char)
 
 # Target array and source array, offset by 1
-targets = np.array(trainingNums[1:])
-sources = np.array(trainingNums[:-1])
+targets = np.array(trainingNums)
+sources = np.array([-1] + trainingNums[:-1])
 
 # One-hot representations
 onehot_targets = np.zeros([len(targets), NUM_CHARS])
