@@ -10,7 +10,7 @@ trainingSequence = 'The quick brown fox jumps over the lazy dog. The dog doesn\'
 #trainingSequence='abcdefghijklmnopqrstuvwxyz'
 #trainingSequence='aaaaab'
 
-# Add a START character to the front of the sequence. Targets will begin with next character.
+# Convert the string to list of chars 
 print trainingSequence
 trainingSequence = list(trainingSequence)
 
