@@ -1,4 +1,4 @@
-import networkcrafter as nc
+import TFlibs.networkcrafter as nc
 import numpy as np
 tf = nc.tf
 
