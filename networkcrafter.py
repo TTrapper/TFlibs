@@ -24,9 +24,15 @@ class Layer:
 
 class InputLayer(Layer):
  
-    def __init__(self, nFeatures, dropout=False):
+    def __init__(self, nFeatures, dropout=False, applyOneHot=False, dtype=tf.float32):
         shape = [None, nFeatures]
-        activations = tf.placeholder(tf.float32, shape=shape, name='xin')
+
+        if applyOneHot:
+            self.inputs = tf.placeholder(dtype=tf.int32, shape=[None])
+            activations = tf.one_hot(self.inputs, nFeatures, dtype=dtype)
+        else:
+            self.inputs = tf.placeholder(dtype, shape=shape)
+            activations = self.inputs
        
         Layer.__init__(self, shape, activations, dropout=dropout)
 
@@ -170,12 +176,16 @@ def GRU(Layer):
  
 class Network:
 
-    def inputLayer(self, nFeatures, dropout=False):
-        self.inLayer = InputLayer(nFeatures, dropout)
+    def inputLayer(self, nFeatures, dropout=False, applyOneHot=False, dtype=tf.float32):
+        self.inLayer = InputLayer(nFeatures, dropout, applyOneHot, dtype)
         self.layers = [self.inLayer]
         self.hiddens = []
         self.outLayer = self.inLayer
       
+    def defineTargets(self, nNodes, applyOneHot, dtype=tf.float32):
+        self.targets = InputLayer(nNodes, False, applyOneHot, dtype)
+        self.targetVals = self.targets.activations
+
     def fullConnectLayer(self,  nNodes, activationFunction, dropout=False):
         self.__addLayer__(FullConnectLayer(self.outLayer, nNodes, activationFunction, dropout))
 
@@ -215,7 +225,7 @@ class Network:
 
         return sess.run(self.outLayer.activations, feed_dict=feedDict)        
         
-    def getFeedDict(self, inputs, keepProb=1, extras={}):
+    def getFeedDict(self, inputs, keepProb=1, extras={}, targets=None):
 
         """Create a feed dicionary for tensorflow. 
 
@@ -224,15 +234,19 @@ class Network:
         extras -- Any values to be added to the dictionary that are external to the network
         """
         # Define the feed_dict for a forward pass
-        feedDict = {self.inLayer.activations : inputs}
+        feedDict = {self.inLayer.inputs: inputs}
         # For each layer with dropout, add its keepProb to feed_dict
         possibleDropoutLayers = [self.inLayer]
         possibleDropoutLayers.extend(self.hiddens)
         for layer in possibleDropoutLayers:
             if layer.applyDropout:
                 feedDict[layer.keepProb] = keepProb
+        
+        if targets is not None:
+            feedDict[self.targets.inputs] = targets
 
-        feedDict.update(extras)
+        feedDict.update(extras) 
+
         return feedDict
 
     def resetRecurrentHiddens(self):
