@@ -1,5 +1,5 @@
 import unittest
-import networkcrafter as nc
+import TFlibs.networkcrafter as nc
 import tensorflow as tf
 import numpy as np
 
@@ -22,10 +22,10 @@ class TestLayerInitialization(unittest.TestCase):
         # Layer with dropout
         shape = [4, 10]
           
-        layer = nc.Layer(shape, tf.nn.softmax(tf.placeholder(tf.float32, shape=[10,1])), True)
+        layer = nc.Layer(shape, tf.nn.softmax(tf.placeholder(tf.float32, shape=[10,1])), None, True)
         self.assertEqual(shape, layer.shape) 
         self.assertTrue(layer.applyDropout)
-        self.assertTrue(layer.keepProb)
+        self.assertTrue(type(layer.keepProb) is tf.Tensor)
 
 #    def test_input_layer_init(self):
 
