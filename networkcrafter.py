@@ -162,8 +162,7 @@ class GRU(Layer):
             # Compute new h value, 
             hCandidate = tf.tanh(x_t + tf.matmul(tf.mul(r, h), hW))
             h = tf.tanh(tf.mul((1-u), hCandidate) + tf.mul(u, hCandidate) + hB)
-            self.h.assign(h) 
-
+        
             return idx+1, h, hSequence.write(idx, h)
 
         # The update loop runs for each example in the batch.
