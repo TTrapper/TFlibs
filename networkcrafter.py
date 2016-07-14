@@ -12,7 +12,8 @@ class Layer:
             self.activations = weightedInputs
           
         if not isinstance(self.activations, tf.Tensor):
-            raise TypeError("A layer's activations must be of type TensorFlow.Tensor.")
+            raise TypeError("A layer's activations must be of type TensorFlow.Tensor. Got: " + \
+                str(type(self.activations)))
 
         self.shape = shape
 
@@ -117,7 +118,7 @@ class RNN(Layer):
 
 def GRU(Layer):
  
-    def __init__( inLayer, nNodes, dropout=False):
+    def __init__(self, inLayer, nNodes, dropout=False):
 
         nTimeSteps = tf.shape(inLayer.activations)[0]
         
@@ -173,7 +174,22 @@ def GRU(Layer):
     def resetHiddenLayer(self):
         self.h.assign(tf.Variable(tf.zeros([1, self.shape[0]])))
 
- 
+
+class TFlowRNN(Layer):
+
+    def __init__(self, inLayer, nNodes):
+
+        nTimeSteps = tf.shape(inLayer.activations)[0]
+#        cell = tf.nn.rnn_cell.BasicRNNCell(nNodes)
+        cell = tf.nn.rnn_cell.GRUCell(nNodes)        
+        sequence = tf.split(0, 30, inLayer.activations)
+
+        outputs, state = tf.nn.rnn(cell, sequence, dtype=tf.float32)
+        activations = tf.concat(0, outputs)
+    
+        Layer.__init__(self, [nNodes, nNodes], activations) 
+
+
 class Network:
 
     def inputLayer(self, nFeatures, dropout=False, applyOneHot=False, dtype=tf.float32):
@@ -205,7 +221,7 @@ class Network:
  
     def gruLayer(self, nNodes, dropout=False):
         self.__addLayer__(RNN(self.outLayer, nNodes, dropout))
-    
+ 
     def __addLayer__(self, layer):
         self.layers.append(layer)
         self.hiddens.append(layer)
