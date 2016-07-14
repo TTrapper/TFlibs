@@ -118,7 +118,7 @@ class RNN(Layer):
         self.h.assign(tf.zeros([self.shape[0]]))
 
 
-def GRU(Layer):
+class GRU(Layer):
  
     def __init__(self, inLayer, nNodes, dropout=False):
 
@@ -145,33 +145,32 @@ def GRU(Layer):
         # Loop counter
         index = tf.constant(0, dtype=tf.int32) 
         loopParams = [index,\
-                      self.h, \
-                      tf.TensorArray(size=nTimeSteps, dynamic_size=False, infer_shape=True)]
+                      self.h,\
+                      tf.TensorArray(dtype=tf.float32, size=nTimeSteps, dynamic_size=False)]
  
         # Each iteration performs one step of RNN update, produces series of hidden states
-        def updateLoopBody(idx, h, activations):
+        def updateLoopBody(idx, h, hSequence):
             # Grab weighted representation of the current input
-            x_t  = xTransform[idx]
-            xU_t = xUpdates[idx]
-            xR_t = xResets[idx]
+            x_t  = tf.slice(xTransform, [idx, 0], [1, -1])
+            xU_t = tf.slice(xUpdates, [idx, 0], [1, -1])
+            xR_t = tf.slice(xResets, [idx, 0], [1, -1])
 
             # Reset and update gates
-            u = tf.nn.sigmoid((tf.matmul(xU_t, xUW) + xUB) + (tf.matmul(h, hUW) + hUB))
-            r = tf.nn.sigmoid((tf.matmul(xR_t, xRW) + xRB) + (tf.matmul(h, hRW) + hRB))           
+            u = tf.nn.sigmoid(xU_t + tf.matmul(h, hUW) + hUB)
+            r = tf.nn.sigmoid(xR_t + tf.matmul(h, hRW) + hRB)           
 
             # Compute new h value, 
-            hCandidate = tf.tanh(x_t + tf.matmul(hW, tf.mul(r, h)))
-            h.assign(tf.tanh(tf.mul((1-u), hCandidate) + tf.mul(u, hCandidate) + hB)) 
+            hCandidate = tf.tanh(x_t + tf.matmul(tf.mul(r, h), hW))
+            h = tf.tanh(tf.mul((1-u), hCandidate) + tf.mul(u, hCandidate) + hB)
+            self.h.assign(h) 
 
-            activations.write(idx, h)
-
-            return idx+1, h, activations
+            return idx+1, h, hSequence.write(idx, self.h)
 
         # The update loop runs for each example in the batch.
         condition = lambda idx, h, activations: tf.less(idx, nTimeSteps)
-        _, _, activations = tf.while_loop(condition, updateLoopBody, loopParams)
-
-        Layer.__init__(self, [nNodes, nNodes], activations.concat(), dropout=dropout)
+        _, _, hStates = tf.while_loop(condition, updateLoopBody, loopParams)
+        
+        Layer.__init__(self, [nNodes, nNodes], hStates.concat(), dropout=dropout)
   
     def resetHiddenLayer(self):
         self.h.assign(tf.Variable(tf.zeros([1, self.shape[0]])))
@@ -222,7 +221,7 @@ class Network:
         self.__addLayer__(RNN(self.outLayer, nNodes, dropout))
  
     def gruLayer(self, nNodes, dropout=False):
-        self.__addLayer__(RNN(self.outLayer, nNodes, dropout))
+        self.__addLayer__(GRU(self.outLayer, nNodes, dropout))
  
     def __addLayer__(self, layer):
         self.layers.append(layer)
