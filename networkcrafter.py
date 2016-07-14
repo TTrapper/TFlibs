@@ -5,6 +5,8 @@ class Layer:
 
     def __init__(self, shape, weightedInputs, activationFunction=None, dropout=False):
 
+        self.weightedInputs = weightedInputs
+
         # Apply activation function
         if activationFunction is not None:
             self.activations = activationFunction(weightedInputs)
