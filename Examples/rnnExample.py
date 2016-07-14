@@ -1,6 +1,7 @@
 import TFlibs.networkcrafter as nc
 import PythonTools.charIntTools as cit
 import numpy as np
+import time
 tf = nc.tf
 
 trainingSequence = 'The quick brown fox jumps over the lazy dog.'
@@ -8,14 +9,13 @@ trainingSequence = 'The quick brown fox jumps over the lazy dog.'
 trainingSequence = 'The quick brown fox jumps over the lazy dog. The dog doesn\'t care much, so she decides that next time the fox jumps over her, she\'s going to be asleep.'
 #trainingSequence = 'a b c d e f g h i j k l m n o p q r s t u v w x y z'
 #trainingSequence='abcdefghijklmnopqrstuvwxyz'
-#trainingSequence='aaaaab'
+#trainingSequence='aab'
 
 # Convert the string to list of chars 
 print trainingSequence
-trainingSequence = list(trainingSequence)
 
 # Map chars to ints
-trainingNums, char2Num = cit.intListFromString(trainingSequence)
+trainingNums, char2Num = cit.intListFromString(list(trainingSequence))
 num2Char = cit.swapDictionary(char2Num)
 NUM_CHARS = len(num2Char)
 
@@ -35,8 +35,9 @@ else:
 # The RNN
 network = nc.Network()
 network.inputLayer(NUM_CHARS, applyOneHot=True)
-network.rnnLayer(100)
-network.gruLayer(100)
+network.rnnLayer(50)
+network.gruLayer(50)
+#network.tfRnnLayer(100)
 network.fullConnectLayer(NUM_CHARS, tf.nn.softmax)
 
 # Create a placeholder for target values. 
@@ -44,22 +45,26 @@ network.defineTargets(NUM_CHARS, applyOneHot=True)
 
 # Cost and gradient descent
 cross_entropy = -tf.reduce_sum(network.targetVals*tf.log(network.outLayer.activations))
-train_step = tf.train.AdamOptimizer(1e-5).minimize(cross_entropy)
+train_step = tf.train.AdamOptimizer(1e-3).minimize(cross_entropy)
 
 sess = tf.InteractiveSession()
 writer = tf.train.SummaryWriter("./tensorlog", sess.graph)
 sess.run(tf.initialize_all_variables())
 
+start = time.time()
+
 # Training
-for i in range(10000):
+for i in range(200):
+
     for sources, targets in zip(sourceBatches, targetBatches):
-        feed = network.getFeedDict(sources, targets=targets)
+        feed = network.getFeedDict(sources, 0.5, targets=targets)
         train_step.run(feed_dict=feed)
 
     if i%20 == 0:
         for sources, targets in zip(sourceBatches, targetBatches):
-            feed = network.getFeedDict(sources)
-            predictions = np.argmax(sess.run(network.outLayer.activations, feed_dict=feed), axis=1)
+            predictions = np.argmax(network.forward(sess, sources, 1), axis=1)
             print ''.join([num2Char[num] for num in predictions])
 
-    network.resetRecurrentHiddens()
+    network.resetRecurrentHiddens() 
+
+print time.time()-start
