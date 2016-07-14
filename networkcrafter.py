@@ -164,7 +164,7 @@ class GRU(Layer):
             h = tf.tanh(tf.mul((1-u), hCandidate) + tf.mul(u, hCandidate) + hB)
             self.h.assign(h) 
 
-            return idx+1, h, hSequence.write(idx, self.h)
+            return idx+1, h, hSequence.write(idx, h)
 
         # The update loop runs for each example in the batch.
         condition = lambda idx, h, activations: tf.less(idx, nTimeSteps)
