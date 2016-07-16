@@ -114,8 +114,8 @@ class RNN(Layer):
 
         Layer.__init__(self, [nNodes, nNodes], activations, dropout=dropout)
   
-    def resetHiddenLayer(self):
-        self.h.assign(tf.zeros([self.shape[0]]))
+    def resetHiddenLayer(self, sess):
+        self.h.assign(tf.zeros([self.shape[0]])).eval(session=sess)
 
 
 class GRU(Layer):
@@ -171,8 +171,8 @@ class GRU(Layer):
 
         Layer.__init__(self, [nNodes, nNodes], hStates.concat(), dropout=dropout)
   
-    def resetHiddenLayer(self):
-        self.h.assign(tf.Variable(tf.zeros([1, self.shape[0]])))
+    def resetHiddenLayer(self, sess):
+        self.h.assign(tf.zeros([1, self.shape[0]])).eval(session=sess)
 
 
 class TFlowRNN(Layer):
@@ -265,10 +265,13 @@ class Network:
 
         return feedDict
 
+    """
     def resetRecurrentHiddens(self):
         for layer in self.layers:
-            if type(layer) is RNN:
+
+            if type(layer) is RNN or type(layer) is GRU:
                 layer.resetHiddenLayer()
+    """         
 
 class MLP(Network):
 

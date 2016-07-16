@@ -65,6 +65,7 @@ for i in range(200):
             predictions = np.argmax(network.forward(sess, sources, 1), axis=1)
             print ''.join([num2Char[num] for num in predictions])
 
-    network.resetRecurrentHiddens() 
-
+#    network.resetRecurrentHiddens() 
+    print network.hiddens[0].h.eval()
+    print network.hiddens[1].h.eval()
 print time.time()-start
