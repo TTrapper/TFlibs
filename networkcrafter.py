@@ -106,8 +106,7 @@ class RNN(Layer):
             uH = tf.matmul(h_row, self.hW) + self.hB
             # Add the inputs, squeeze it back to rank 1. Will be packed into a matrix by scan().
             hPlusX = tf.squeeze(tf.tanh(x + uH))
-            # Keep a record of last hidden state that will persist between calls.
-            self.h.assign(hPlusX)
+            
             return hPlusX
 
         activations = tf.scan(scanInputs, xTransform, initializer=self.h)
@@ -265,13 +264,12 @@ class Network:
 
         return feedDict
 
-    """
-    def resetRecurrentHiddens(self):
+    
+    def resetRecurrentHiddens(self, sess):
         for layer in self.layers:
-
-            if type(layer) is RNN or type(layer) is GRU:
+            if isinstance(layer, RNN) or isinstance(layer, GRU):
                 layer.resetHiddenLayer()
-    """         
+             
 
 class MLP(Network):
 
