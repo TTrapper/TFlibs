@@ -107,7 +107,7 @@ class RNN(Layer):
             # Add the inputs, squeeze it back to rank 1. Will be packed into a matrix by scan().
             hPlusX = tf.squeeze(tf.tanh(x + uH))
             
-            return hPlusX
+            return self.h.assign(hPlusX)
 
         activations = tf.scan(scanInputs, xTransform, initializer=self.h)
 
