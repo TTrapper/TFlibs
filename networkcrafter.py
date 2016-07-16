@@ -111,7 +111,15 @@ class RNN(Layer):
 
         activations = tf.scan(scanInputs, xTransform, initializer=self.h)
 
-        Layer.__init__(self, [nNodes, nNodes], activations, dropout=dropout)
+        # This is quite hacky, but the following lines force a depency on self.h being assigned
+        # the final hidden state. The last index of the array holding the activations is written
+        # to with it's own value after having been assigned to self.h. There must be a better way.
+        nTimeSteps = tf.shape(inLayer.activations)[0]
+        actArray = tf.TensorArray(dtype=tf.float32, size=nTimeSteps, dynamic_size=False)
+        actArray = actArray.unpack(activations)
+        actArray.write(nTimeSteps-1, self.h.assign(actArray.read(nTimeSteps-1)))
+
+        Layer.__init__(self, [nNodes, nNodes], actArray.pack(), dropout=dropout)
   
     def resetHiddenLayer(self, sess):
         self.h.assign(tf.zeros([self.shape[0]])).eval(session=sess)
