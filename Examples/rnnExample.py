@@ -60,12 +60,14 @@ for i in range(200):
         feed = network.getFeedDict(sources, 0.5, targets=targets)
         train_step.run(feed_dict=feed)
 
+        network.resetRecurrentHiddens(sess) 
+
     if i%20 == 0:
         for sources, targets in zip(sourceBatches, targetBatches):
             predictions = np.argmax(network.forward(sess, sources, 1), axis=1)
             print ''.join([num2Char[num] for num in predictions])
 
-#    network.resetRecurrentHiddens() 
-    print network.hiddens[0].h.eval()
-    print network.hiddens[1].h.eval()
+        network.resetRecurrentHiddens(sess) 
+        print network.hiddens[0].h.eval()
+        print network.hiddens[1].h.eval()
 print time.time()-start

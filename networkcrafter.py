@@ -107,7 +107,7 @@ class RNN(Layer):
             # Add the inputs, squeeze it back to rank 1. Will be packed into a matrix by scan().
             hPlusX = tf.squeeze(tf.tanh(x + uH))
             
-            return self.h.assign(hPlusX)
+            return hPlusX
 
         activations = tf.scan(scanInputs, xTransform, initializer=self.h)
 
@@ -268,7 +268,7 @@ class Network:
     def resetRecurrentHiddens(self, sess):
         for layer in self.layers:
             if isinstance(layer, RNN) or isinstance(layer, GRU):
-                layer.resetHiddenLayer()
+                layer.resetHiddenLayer(sess)
              
 
 class MLP(Network):
