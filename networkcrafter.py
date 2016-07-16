@@ -162,13 +162,13 @@ class GRU(Layer):
             # Compute new h value, 
             hCandidate = tf.tanh(x_t + tf.matmul(tf.mul(r, h), hW))
             h = tf.tanh(tf.mul((1-u), hCandidate) + tf.mul(u, hCandidate) + hB)
-        
-            return idx+1, h, hSequence.write(idx, h)
+
+            return idx+1, self.h.assign(h), hSequence.write(idx, h)
 
         # The update loop runs for each example in the batch.
         condition = lambda idx, h, activations: tf.less(idx, nTimeSteps)
         _, _, hStates = tf.while_loop(condition, updateLoopBody, loopParams)
-        
+
         Layer.__init__(self, [nNodes, nNodes], hStates.concat(), dropout=dropout)
   
     def resetHiddenLayer(self):
