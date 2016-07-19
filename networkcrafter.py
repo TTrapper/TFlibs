@@ -167,8 +167,8 @@ class GRU(Layer):
             r = tf.nn.sigmoid(xR_t + tf.matmul(h, hRW) + hRB)           
 
             # Compute new h value, 
-            hCandidate = tf.tanh(x_t + tf.matmul(tf.mul(r, h), hW))
-            h = tf.tanh(tf.mul((1-u), hCandidate) + tf.mul(u, hCandidate) + hB)
+            hCandidate = tf.tanh(x_t + tf.matmul(tf.mul(r, h), hW) + hB)
+            h = tf.mul((1-u), hCandidate) + tf.mul(u, hCandidate)
 
             return idx+1, self.h.assign(h), hSequence.write(idx, h)
 
@@ -189,12 +189,12 @@ class TFlowRNN(Layer):
         nTimeSteps = tf.shape(inLayer.activations)[0]
 #        cell = tf.nn.rnn_cell.BasicRNNCell(nNodes)
         cell = tf.nn.rnn_cell.GRUCell(nNodes)        
-        sequence = tf.split(0, 30, inLayer.activations)
+#        sequence = tf.split(0, 127, inLayer.activations)
+        sequence = tf.expand_dims(inLayer.activations, 0)
 
-        outputs, state = tf.nn.rnn(cell, sequence, dtype=tf.float32)
-        activations = tf.concat(0, outputs)
+        outputs, state = tf.nn.dynamic_rnn(cell, sequence, dtype=tf.float32)
     
-        Layer.__init__(self, [nNodes, nNodes], activations) 
+        Layer.__init__(self, [nNodes, nNodes], tf.squeeze(outputs, [0])) 
 
 
 class Network:
@@ -228,7 +228,10 @@ class Network:
  
     def gruLayer(self, nNodes, dropout=False):
         self.__addLayer__(GRU(self.outLayer, nNodes, dropout))
- 
+
+    def tfRNN(self, nNodes):
+        self.__addLayer__(TFlowRNN(self.outLayer, nNodes))
+
     def __addLayer__(self, layer):
         self.layers.append(layer)
         self.hiddens.append(layer)
