@@ -184,7 +184,7 @@ class GRU(Layer):
 
 class TFlowRNN(Layer):
 
-    def __init__(self, inLayer, nNodes, nTimeSteps):
+    def __init__(self, inLayer, nNodes):
 
         cell = tf.nn.rnn_cell.GRUCell(nNodes)
         self.h = tf.Variable(tf.zeros([1, nNodes]))
@@ -192,7 +192,10 @@ class TFlowRNN(Layer):
         sequence = tf.expand_dims(inLayer.activations, 0)
         outputs, state = tf.nn.dynamic_rnn(cell, sequence, initial_state=self.h, dtype=tf.float32)
         
+        # For now, batch size is always 1, squeeze that dim out
         activations = tf.squeeze(outputs, [0])
+        
+        # Little hack to cause the hidden state to persist (for time-truncated runs)
         nSteps = tf.shape(activations)[0]
         activations = tf.concat(0, [activations, self.h.assign(state)])
         activations = tf.slice(activations, [0, 0], [nSteps, -1]) 
@@ -232,8 +235,8 @@ class Network:
     def gruLayer(self, nNodes, dropout=False):
         self.__addLayer__(GRU(self.outLayer, nNodes, dropout))
 
-    def tfRNN(self, nNodes, nTimeSteps):
-        self.__addLayer__(TFlowRNN(self.outLayer, nNodes, nTimeSteps))
+    def tfRNN(self, nNodes):
+        self.__addLayer__(TFlowRNN(self.outLayer, nNodes))
 
     def __addLayer__(self, layer):
         self.layers.append(layer)
