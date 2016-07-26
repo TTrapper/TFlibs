@@ -184,15 +184,16 @@ class TFlowRNN(Layer):
         sequence = tf.expand_dims(inLayer.activations, 0)
         outputs, state = tf.nn.dynamic_rnn(cell, sequence, initial_state=self.h, dtype=tf.float32)
         
+        # Can be run separately to save state between runs.
+        self.updateState = self.h.assign(state)
+
         # For now, batch size is always 1, squeeze that dim out
         activations = tf.squeeze(outputs, [0])
-        
-        # Little hack to cause the hidden state to persist (for time-truncated runs)
-        nSteps = tf.shape(activations)[0]
-        activations = tf.concat(0, [activations, self.h.assign(state)])
-        activations = tf.slice(activations, [0, 0], [nSteps, -1]) 
-         
+  
         Layer.__init__(self, [nNodes, nNodes], activations) 
+
+    def resetHiddenLayer(self, sess):
+        self.h.assign(tf.zeros([1, self.shape[0]])).eval(session=sess)
 
 
 class Network:
@@ -237,6 +238,7 @@ class Network:
 
     def __init__(self):
         self.hiddens =[]
+
         
     def forward(self, sess, inputs, keepProb=1):
         """Do a forward pass through the network and return the result.
@@ -248,6 +250,7 @@ class Network:
         feedDict = self.getFeedDict(inputs, keepProb)
 
         return sess.run(self.outLayer.activations, feed_dict=feedDict)        
+
         
     def getFeedDict(self, inputs, keepProb=1, extras={}, targets=None):
 
@@ -274,9 +277,16 @@ class Network:
         return feedDict
 
     
+    def saveHiddenStates(self, sess, inputs, keepProb=1):
+        feed = self.getFeedDict(inputs, keepProb)
+        for layer in self.layers:
+            if isinstance(layer, TFlowRNN):
+                layer.updateState.eval(session=sess, feed_dict=feed)
+    
+
     def resetRecurrentHiddens(self, sess):
         for layer in self.layers:
-            if isinstance(layer, RNN) or isinstance(layer, GRU):
+            if isinstance(layer, RNN) or isinstance(layer, GRU) or isinstance(layer, TFlowRNN):
                 layer.resetHiddenLayer(sess)
              
 

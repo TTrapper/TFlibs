@@ -16,5 +16,7 @@ sess.run(tf.initialize_all_variables())
 print network.forward(sess, data)
 one = data[0,:]
 one.shape = 1,3
+network.saveHiddenStates(sess, data)
+network.resetRecurrentHiddens(sess)
 print network.forward(sess, one)
 print network.forward(sess, data)
