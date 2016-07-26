@@ -35,9 +35,10 @@ else:
 # The RNN
 network = nc.Network()
 network.inputLayer(NUM_CHARS, applyOneHot=True)
-network.rnnLayer(50)
-network.gruLayer(50)
-#network.tfRnnLayer(100)
+#network.rnnLayer(50)
+#network.gruLayer(100)
+#network.tfRNN(100)
+network.dynamicGRU(100, nLayers=2)
 network.fullConnectLayer(NUM_CHARS, tf.nn.softmax)
 
 # Create a placeholder for target values. 
@@ -60,7 +61,7 @@ for i in range(200):
         feed = network.getFeedDict(sources, 0.5, targets=targets)
         train_step.run(feed_dict=feed)
 
-        network.resetRecurrentHiddens(sess) 
+    network.resetRecurrentHiddens(sess) 
 
     if i%20 == 0:
         for sources, targets in zip(sourceBatches, targetBatches):
@@ -69,5 +70,5 @@ for i in range(200):
 
         network.resetRecurrentHiddens(sess) 
         print network.hiddens[0].h.eval()
-        print network.hiddens[1].h.eval()
+#        print network.hiddens[1].h.eval()
 print time.time()-start
