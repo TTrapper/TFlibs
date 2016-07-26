@@ -184,11 +184,10 @@ class TFlowRNN(Layer):
         sequence = tf.expand_dims(inLayer.activations, 0)
         outputs, state = tf.nn.dynamic_rnn(cell, sequence, initial_state=self.h, dtype=tf.float32)
         
-        # Can be run separately to save state between runs.
-        self.updateState = self.h.assign(state)
-
-        # For now, batch size is always 1, squeeze that dim out
-        activations = tf.squeeze(outputs, [0])
+        # Control depency forces the hidden state to persist
+        with tf.control_dependencies([self.h.assign(state)]):
+            # For now, batch size is always 1, squeeze that dim out
+            activations = tf.squeeze(outputs, [0])
   
         Layer.__init__(self, [nNodes, nNodes], activations) 
 
@@ -274,15 +273,7 @@ class Network:
 
         feedDict.update(extras) 
 
-        return feedDict
-
-    
-    def saveHiddenStates(self, sess, inputs, keepProb=1):
-        feed = self.getFeedDict(inputs, keepProb)
-        for layer in self.layers:
-            if isinstance(layer, TFlowRNN):
-                layer.updateState.eval(session=sess, feed_dict=feed)
-    
+        return feedDict 
 
     def resetRecurrentHiddens(self, sess):
         for layer in self.layers:
