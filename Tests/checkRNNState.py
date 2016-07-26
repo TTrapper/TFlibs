@@ -9,7 +9,7 @@ data = np.array([[1,2,3],[1,2,3],[1,2,3],[1,2,3]])
 network = nc.Network()
 network.inputLayer(3)
 #network.rnnLayer(2)
-network.tfRNN(2)
+network.dynamicGRU(2, nLayers=2)
 
 sess.run(tf.initialize_all_variables())
 

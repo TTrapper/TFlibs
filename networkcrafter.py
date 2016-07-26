@@ -172,16 +172,24 @@ class GRU(Layer):
   
     def resetHiddenLayer(self, sess):
         self.h.assign(tf.zeros([1, self.shape[0]])).eval(session=sess)
+ 
 
+class DynamicGRU(Layer):
 
-class TFlowRNN(Layer):
+    def __init__(self, inLayer, nNodes, nLayers=1):
 
-    def __init__(self, inLayer, nNodes):
-
+        # TensorFlow's build in GRU cell
         cell = tf.nn.rnn_cell.GRUCell(nNodes)
-        self.h = tf.Variable(tf.zeros([1, nNodes]))
 
+        # Can stack multiple layers
+        assert nLayers > 0  
+        if nLayers > 1:
+            cell = tf.nn.rnn_cell.MultiRNNCell([cell]*nLayers)
+        self.nLayers = nLayers
+ 
         sequence = tf.expand_dims(inLayer.activations, 0)
+
+        self.h = tf.Variable(tf.zeros([1, nNodes*nLayers]))
         outputs, state = tf.nn.dynamic_rnn(cell, sequence, initial_state=self.h, dtype=tf.float32)
         
         # Control depency forces the hidden state to persist
@@ -192,7 +200,7 @@ class TFlowRNN(Layer):
         Layer.__init__(self, [nNodes, nNodes], activations) 
 
     def resetHiddenLayer(self, sess):
-        self.h.assign(tf.zeros([1, self.shape[0]])).eval(session=sess)
+        self.h.assign(tf.zeros([1, self.shape[0]*self.nLayers])).eval(session=sess)
 
 
 class Network:
@@ -227,8 +235,8 @@ class Network:
     def gruLayer(self, nNodes, dropout=False):
         self.__addLayer__(GRU(self.outLayer, nNodes, dropout))
 
-    def tfRNN(self, nNodes):
-        self.__addLayer__(TFlowRNN(self.outLayer, nNodes))
+    def dynamicGRU(self, nNodes, nLayers=1):
+        self.__addLayer__(DynamicGRU(self.outLayer, nNodes, nLayers))
 
     def __addLayer__(self, layer):
         self.layers.append(layer)
@@ -277,7 +285,7 @@ class Network:
 
     def resetRecurrentHiddens(self, sess):
         for layer in self.layers:
-            if isinstance(layer, RNN) or isinstance(layer, GRU) or isinstance(layer, TFlowRNN):
+            if isinstance(layer, RNN) or isinstance(layer, GRU) or isinstance(layer, DynamicGRU):
                 layer.resetHiddenLayer(sess)
              
 
