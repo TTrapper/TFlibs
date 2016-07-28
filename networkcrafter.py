@@ -174,52 +174,6 @@ class GRU(Layer):
         self.h.assign(tf.zeros([1, self.shape[0]])).eval(session=sess)
  
 
-"""
-class DynamicGRU(Layer):
-
-    def __init__(self, inLayer, nNodes, nLayers=1):
-
-        # TensorFlow's build in GRU cell
-        cell = tf.nn.rnn_cell.GRUCell(nNodes)
-
-        # Can stack multiple layers
-        assert nLayers > 0  
-        if nLayers > 1:
-            cell = tf.nn.rnn_cell.MultiRNNCell([cell]*nLayers, state_is_tuple=True)
-        self.nLayers = nLayers
- 
-        sequence = tf.expand_dims(inLayer.activations, 0)
-
-        #self.h = [tf.Variable(tf.zeros([1, nNodes]))]*nLayers
-        self.h1 = tf.Variable(tf.zeros([1, nNodes]))
-        self.h2 = tf.Variable(tf.zeros([1, nNodes]))
-
-#        outputs, state = tf.nn.dynamic_rnn(cell, sequence, initial_state=self.h, dtype=tf.float32)
-        outputs, state = tf.nn.dynamic_rnn(cell, sequence, initial_state=[self.h1, self.h2], dtype=tf.float32)
-        
-        # Control depency forces the hidden state to persist
-#        with tf.control_dependencies([h.assign(s) for h,s in zip(self.h, state)]):
-        with tf.control_dependencies([h.assign(s) for h,s in zip([self.h1,self.h2], state)]):
-            # For now, batch size is always 1, squeeze that dim out
-            activations = tf.squeeze(outputs, [0]) 
- 
-
-#        self.resets = [h.assign(tf.zeros([1, nNodes])) for h in self.h]
-
- 
-        Layer.__init__(self, [nNodes, nNodes], activations) 
-
-    def resetHiddenLayer(self, sess):
-
-        self.h1.assign(tf.zeros([1, self.shape[0]])).eval(session=sess)
-        self.h2.assign(tf.zeros([1, self.shape[0]])).eval(session=sess)
-        
- #       sess.run(self.resets)
-#        [reset.eval(session=sess) for reset in self.resets]
-
-#        [h.assign(tf.zeros([1, self.shape[0]])).eval(session=sess) for h in self.h]
-
-"""
 class DynamicGRU(Layer):
 
     def __init__(self, inLayer, nNodes, nLayers=1):
