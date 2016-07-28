@@ -78,7 +78,7 @@ class PoolLayer(Layer):
 class ReshapeLayer(Layer):
 
     def __init__(self, inLayer, newShape, dropout=False):
-        activations = tf.reshape(inLayer.activations, newShape);
+        activations = tf.reshape(inLayer.activations, newShape, name='reshapeLayer');
         
         Layer.__init__(self, newShape, activations, dropout=dropout)
 
@@ -176,7 +176,7 @@ class GRU(Layer):
 
 class DynamicGRU(Layer):
 
-    def __init__(self, inLayer, nNodes, nLayers=1):
+    def __init__(self, inLayer, nNodes, nLayers=1, batchSize=1):
 
         # TensorFlow's build in GRU cell
         cell = tf.nn.rnn_cell.GRUCell(nNodes)
@@ -186,21 +186,25 @@ class DynamicGRU(Layer):
         if nLayers > 1:
             cell = tf.nn.rnn_cell.MultiRNNCell([cell]*nLayers)
         self.nLayers = nLayers
- 
-        sequence = tf.expand_dims(inLayer.activations, 0)
+        self.batchSize = batchSize
+         
+        # Assumption that data has rank-2 on the way in, reshape to get a batch of sequences
+        sequence = tf.reshape(inLayer.activations, [batchSize, -1, inLayer.shape[-1]])
 
-        self.h = tf.Variable(tf.zeros([1, nNodes*nLayers]))
+        self.h = tf.Variable(tf.zeros([batchSize, nNodes*nLayers]))
+
         outputs, state = tf.nn.dynamic_rnn(cell, sequence, initial_state=self.h, dtype=tf.float32)
         
         # Control depency forces the hidden state to persist
         with tf.control_dependencies([self.h.assign(state)]):
-            # For now, batch size is always 1, squeeze that dim out
-            activations = tf.squeeze(outputs, [0])
+            # Squeeze the batches back together
+            activations = tf.reshape(outputs, [-1, nNodes])
+
   
         Layer.__init__(self, [nNodes, nNodes], activations) 
 
     def resetHiddenLayer(self, sess):
-        self.h.assign(tf.zeros([1, self.shape[0]*self.nLayers])).eval(session=sess)
+        self.h.assign(tf.zeros([self.batchSize, self.shape[0]*self.nLayers])).eval(session=sess)
 
 
 class Network:
@@ -235,8 +239,8 @@ class Network:
     def gruLayer(self, nNodes, dropout=False):
         self.__addLayer__(GRU(self.outLayer, nNodes, dropout))
 
-    def dynamicGRU(self, nNodes, nLayers=1):
-        self.__addLayer__(DynamicGRU(self.outLayer, nNodes, nLayers))
+    def dynamicGRU(self, nNodes, nLayers=1, batchSize=1):
+        self.__addLayer__(DynamicGRU(self.outLayer, nNodes, nLayers, batchSize))
 
     def __addLayer__(self, layer):
         self.layers.append(layer)
@@ -247,7 +251,7 @@ class Network:
         self.hiddens =[]
 
         
-    def forward(self, sess, inputs, keepProb=1):
+    def forward(self, sess, inputs, keepProb=1, batchSize=1):
         """Do a forward pass through the network and return the result.
 
         inputs -- The input data
@@ -256,7 +260,12 @@ class Network:
         """
         feedDict = self.getFeedDict(inputs, keepProb)
 
-        return sess.run(self.outLayer.activations, feed_dict=feedDict)        
+        output = self.outLayer.activations        
+        if batchSize > 1: 
+            output = tf.reshape(output, [batchSize, -1, self.outLayer.shape[-1]])
+            
+
+        return sess.run(output, feed_dict=feedDict)
 
         
     def getFeedDict(self, inputs, keepProb=1, extras={}, targets=None):

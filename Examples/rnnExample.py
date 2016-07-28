@@ -32,13 +32,17 @@ else:
     targetBatches = [targets]
     sourceBatches = [sources]
 
+sess = tf.InteractiveSession()
+
 # The RNN
 network = nc.Network()
 network.inputLayer(NUM_CHARS, applyOneHot=True)
 #network.rnnLayer(50)
 #network.gruLayer(100)
 #network.tfRNN(100)
+network.reshapeLayer([1, -1, NUM_CHARS])
 network.dynamicGRU(100, nLayers=2)
+network.reshapeLayer([-1, 100])
 network.fullConnectLayer(NUM_CHARS, tf.nn.softmax)
 
 # Create a placeholder for target values. 
@@ -48,7 +52,7 @@ network.defineTargets(NUM_CHARS, applyOneHot=True)
 cross_entropy = -tf.reduce_sum(network.targetVals*tf.log(network.outLayer.activations))
 train_step = tf.train.AdamOptimizer(1e-3).minimize(cross_entropy)
 
-sess = tf.InteractiveSession()
+
 writer = tf.train.SummaryWriter("./tensorlog", sess.graph)
 sess.run(tf.initialize_all_variables())
 
@@ -69,6 +73,6 @@ for i in range(200):
             print ''.join([num2Char[num] for num in predictions])
 
         network.resetRecurrentHiddens(sess) 
-        print network.hiddens[0].h.eval()
+#        print network.hiddens[0].h.eval()
 #        print network.hiddens[1].h.eval()
 print time.time()-start
