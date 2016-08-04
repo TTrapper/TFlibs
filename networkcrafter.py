@@ -45,8 +45,8 @@ class FullConnectLayer(Layer):
     def __init__(self, inLayer, nNodes, activationFunction, dropout=False):
         
         shape = [inLayer.shape[1], nNodes]
-        
-        xavierStddev = sqrt(3/(shape[0]+shape[1]))
+
+        xavierStddev = np.sqrt(3.0/(shape[0]+shape[1]))
         self.weights = tf.Variable(tf.random_normal(shape=shape, stddev=xavierStddev))
         self.biases = tf.Variable(tf.random_normal(shape=[nNodes], stddev=xavierStddev))
 
