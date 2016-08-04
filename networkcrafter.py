@@ -45,8 +45,10 @@ class FullConnectLayer(Layer):
     def __init__(self, inLayer, nNodes, activationFunction, dropout=False):
         
         shape = [inLayer.shape[1], nNodes]
-        self.weights = tf.Variable(tf.random_normal(shape, stddev=0.1 ))
-        self.biases = tf.Variable(tf.constant(0.1, dtype=tf.float32, shape=[nNodes]))
+        
+        xavierStddev = sqrt(3/(shape[0]+shape[1]))
+        self.weights = tf.Variable(tf.random_normal(shape=shape, stddev=xavierStddev))
+        self.biases = tf.Variable(tf.random_normal(shape=[nNodes], stddev=xavierStddev))
 
         weightedInput = tf.matmul(inLayer.activations, self.weights) + self.biases
          
@@ -176,7 +178,7 @@ class GRU(Layer):
 
 class DynamicGRU(Layer):
 
-    def __init__(self, inLayer, nNodes, nLayers=1, batchSize=1):
+    def __init__(self, inLayer, nNodes, nLayers=1, batchSize=1, dropout=False):
 
         # TensorFlow's build in GRU cell
         cell = tf.nn.rnn_cell.GRUCell(nNodes)
@@ -201,7 +203,7 @@ class DynamicGRU(Layer):
             activations = tf.reshape(outputs, [-1, nNodes])
 
   
-        Layer.__init__(self, [nNodes, nNodes], activations) 
+        Layer.__init__(self, [nNodes, nNodes], activations, dropout=dropout) 
 
     def resetHiddenLayer(self, sess):
         self.h.assign(tf.zeros([self.batchSize, self.shape[0]*self.nLayers])).eval(session=sess)
@@ -239,8 +241,8 @@ class Network:
     def gruLayer(self, nNodes, dropout=False):
         self.__addLayer__(GRU(self.outLayer, nNodes, dropout))
 
-    def dynamicGRU(self, nNodes, nLayers=1, batchSize=1):
-        self.__addLayer__(DynamicGRU(self.outLayer, nNodes, nLayers, batchSize))
+    def dynamicGRU(self, nNodes, nLayers=1, batchSize=1, dropout=False):
+        self.__addLayer__(DynamicGRU(self.outLayer, nNodes, nLayers, batchSize, dropout=dropout))
 
     def __addLayer__(self, layer):
         self.layers.append(layer)
