@@ -44,7 +44,7 @@ class FullConnectLayer(Layer):
 
     def __init__(self, inLayer, nNodes, activationFunction, dropout=False):
         
-        shape = [inLayer.shape[1], nNodes]
+        shape = [inLayer.shape[-1], nNodes]
 
         xavierStddev = np.sqrt(3.0/(shape[0]+shape[1]))
         self.weights = tf.Variable(tf.random_normal(shape=shape, stddev=xavierStddev))
@@ -207,6 +207,30 @@ class DynamicGRU(Layer):
 
     def resetHiddenLayer(self, sess):
         self.h.assign(tf.zeros([self.batchSize, self.shape[0]*self.nLayers])).eval(session=sess)
+
+
+class Seq2SeqBasic(Layer):
+
+    def __init__(self, encodeInLayer, decodeInLayer, nNodes, enSeqLength, deSeqLength):
+
+
+        nFeaturesEn = encodeInLayer.shape[-1]
+        nFeaturesDe = decodeInLayer.shape[-1]
+
+        encodeInputs = tf.reshape(encodeInLayer.activations, [-1, enSeqLength, nFeaturesDe])
+        decodeInputs = tf.reshape(decodeInLayer.activations, [-1, deSeqLength, nFeaturesEn])
+ 
+        encodeInputs = tf.unpack(encodeInputs, enSeqLength, axis=1)
+        decodeInputs = tf.unpack(decodeInputs, deSeqLength, axis=1)
+
+        cell = tf.nn.rnn_cell.GRUCell(nNodes)
+
+        outputs, state = tf.nn.seq2seq.basic_rnn_seq2seq(encodeInputs, decodeInputs, cell)
+
+        activations = tf.concat(1, outputs)
+        activations = tf.reshape(activations, [-1, nNodes])
+
+        Layer.__init__(self, [nNodes], activations)
 
 
 class Network:
