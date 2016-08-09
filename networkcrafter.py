@@ -241,6 +241,9 @@ class Network:
         self.hiddens = []
         self.outLayer = self.inLayer
       
+    def defineDecodeInLayer(self, nFeatures, dropout=False, applyOneHot=False, dtype=tf.float32):
+        self.decodeInLayer = InputLayer(nFeatures, dropout, applyOneHot, dtype)
+
     def defineTargets(self, nNodes, applyOneHot, dtype=tf.float32):
         self.targets = InputLayer(nNodes, False, applyOneHot, dtype)
         self.targetVals = self.targets.activations
@@ -268,12 +271,20 @@ class Network:
     def dynamicGRU(self, nNodes, nLayers=1, batchSize=1, dropout=False):
         self.__addLayer__(DynamicGRU(self.outLayer, nNodes, nLayers, batchSize, dropout=dropout))
 
+    def seq2SeqBasic(self, nNodes, enSeqLen, deSeqLen):
+        if self.decodeInLayer is None:
+            raise StandardError("Must define a decodeInLayer for the Seq2Seq model.")
+        self.__addLayer__(Seq2SeqBasic(self.outLayer, self.decodeInLayer, nNodes,\
+            enSeqLen, deSeqLen))
+
     def __addLayer__(self, layer):
         self.layers.append(layer)
         self.hiddens.append(layer)
         self.outLayer = layer
+        self.outputs = layer.activations
 
     def __init__(self):
+        self.decodeInLayer = None
         self.hiddens =[]
 
         
@@ -294,7 +305,7 @@ class Network:
         return sess.run(output, feed_dict=feedDict)
 
         
-    def getFeedDict(self, inputs, keepProb=1, extras={}, targets=None):
+    def getFeedDict(self, inputs, keepProb=1, extras={}, targets=None, decoderInputs=None):
 
         """Create a feed dicionary for tensorflow. 
 
@@ -310,9 +321,11 @@ class Network:
         for layer in possibleDropoutLayers:
             if layer.applyDropout:
                 feedDict[layer.keepProb] = keepProb
-        
+
         if targets is not None:
             feedDict[self.targets.inputs] = targets
+        if decoderInputs is not None:
+            feedDict[self.decodeInLayer.inputs] = decoderInputs
 
         feedDict.update(extras) 
 
