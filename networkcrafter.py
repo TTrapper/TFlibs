@@ -217,21 +217,31 @@ class Seq2SeqBasic(Layer):
         nFeaturesEn = encodeInLayer.shape[-1]
         nFeaturesDe = decodeInLayer.shape[-1]
 
-        encodeInputs = tf.reshape(encodeInLayer.activations, [-1, enSeqLength, nFeaturesDe])
-        decodeInputs = tf.reshape(decodeInLayer.activations, [-1, deSeqLength, nFeaturesEn])
+        encodeInputs = tf.reshape(encodeInLayer.activations, [-1, enSeqLength, nFeaturesEn])
+        decodeInputs = tf.reshape(decodeInLayer.activations, [-1, deSeqLength, nFeaturesDe])
  
         encodeInputs = tf.unpack(encodeInputs, enSeqLength, axis=1)
         decodeInputs = tf.unpack(decodeInputs, deSeqLength, axis=1)
 
-        cell = tf.nn.rnn_cell.GRUCell(nNodes)
+        # Passed to decoder, determines whether to pass in the decodeInputs or the prvious pred
+        self.feedPrev = tf.Variable(tf.constant(False))
+        def loopFunction(prev, i):
+            feedDecodeIn = lambda : decodeInputs[i]
+            feedPredict = lambda : tf.one_hot(tf.argmax(prev, 1), nFeaturesDe)
+            return tf.cond(self.feedPrev, feedPredict, feedDecodeIn)
 
-        outputs, state = tf.nn.seq2seq.basic_rnn_seq2seq(encodeInputs, decodeInputs, cell)
+        cell = tf.nn.rnn_cell.GRUCell(nNodes)
+        _, encodedState = tf.nn.rnn(cell, encodeInputs, dtype=tf.float32)
+        outputs, state = tf.nn.seq2seq.rnn_decoder(decodeInputs, encodedState, cell,\
+             loop_function=loopFunction)
 
         activations = tf.concat(1, outputs)
         activations = tf.reshape(activations, [-1, nNodes])
 
         Layer.__init__(self, [nNodes], activations)
 
+    def setFeedPrevious(self, boolVal, sess):
+        self.feedPrev.assign(boolVal).eval(session=sess)
 
 class Network:
 
