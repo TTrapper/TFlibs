@@ -12,25 +12,21 @@ def testDropout(layer, expectDropoutOn):
 class TestLayerInitialization(unittest.TestCase):
 
     def test_base_layer_init(self):
-        # Layer with no dropout
+        # Layer with no dropout, no activation
         shape = [10, 4]
-        layer = nc.Layer(shape, tf.nn.softmax(np.ones([4,1])))
-
+        layer = nc.Layer(shape)
         self.assertEqual(shape, layer.shape)
-        self.assertTrue(isinstance(layer.activations, tf.Tensor))
-        self.assertTrue(testDropout(layer, expectDropoutOn=False))
-        with self.assertRaises(TypeError):
-            layer = nc.Layer(shape, tf.nn.softmax, True)
+        self.assertFalse(layer.applyDropout)
+        self.assertEqual(None, layer.activationFunction)
 
-        # Layer with dropout
+        # Layer with dropout and activation
         shape = [4, 10]
-        layer = nc.Layer(shape, tf.ones(shape=[10,1], dtype=tf.float32), tf.nn.softmax, True)
-
+        layer = nc.Layer(shape, tf.nn.softmax, True)
         self.assertEqual(shape, layer.shape)
-        self.assertTrue(isinstance(layer.activations, tf.Tensor))
-        self.assertTrue(testDropout(layer, expectDropoutOn=True))
+        self.assertTrue(layer.applyDropout)
+        self.assertEqual(layer.activationFunction, tf.nn.softmax)
 
-    def test_input_layer(self):
+    def test_input_layer_init(self):
         nFeatures = 10
         setShape = [2, nFeatures]
         layer = nc.InputLayer(nFeatures, applyOneHot=False, dtype=tf.int32)
@@ -42,6 +38,37 @@ class TestLayerInitialization(unittest.TestCase):
         self.assertTrue(shape.all() == np.array(setShape).all())
 
 
+class TestLayerGraphBuild(unittest.TestCase):
+
+    def test_base_layer_build(self):
+        shape = [2, 4]
+        # Layer with no dropout, with activation
+        layer = nc.Layer(shape, tf.nn.softmax)
+        with self.assertRaises(TypeError):
+            layer.buildGraph(shape)
+        layer.buildGraph(tf.constant(np.ones(shape)))
+        self.assertTrue(isinstance(layer.activations, tf.Tensor))
+        self.assertTrue(layer.keepProb is None)
+        manuallyActivated = sess.run(tf.nn.softmax(layer.weightedInputs))
+        self.assertEqual(sess.run(layer.activations).tolist(), manuallyActivated.tolist())
+
+        shape = [7, 8]
+        # Layer with no dropout, no activation
+        layer = nc.Layer(shape)
+        layer.buildGraph(tf.constant(np.ones(shape)*5, dtype=tf.float32))
+        self.assertEqual(sess.run(layer.activations).tolist(), (np.ones(shape)*5).tolist())
+
+        shape = [100, 100]
+        # Layer with dropout, no activation
+        layer = nc.Layer(shape, dropout=True)
+        layer.buildGraph(tf.ones(shape=shape))
+        self.assertTrue(isinstance(layer.keepProb, tf.Tensor))
+        outputs = sess.run(layer.activations, feed_dict={layer.keepProb:1})
+        self.assertEqual(np.sum(outputs), shape[0]*shape[1])
+        outputs = sess.run(layer.activations, feed_dict={layer.keepProb:0.5})
+        numKept = np.sum(np.where(outputs == 0, 0, 1))
+        numExpected =  (shape[0]*shape[1])*0.5
+        self.assertTrue(abs(numKept-numExpected) < 100)
 
 
 if __name__ == '__main__':

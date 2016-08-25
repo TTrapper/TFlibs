@@ -3,23 +3,26 @@ import tensorflow as tf
 
 class Layer:
 
-    def __init__(self, shape, weightedInputs, activationFunction=None, dropout=False):
+    def __init__(self, shape, activationFunction=None, dropout=False):
 
+        self.activationFunction = activationFunction
+        self.shape = shape
+        self.keepProb = None
+        self.applyDropout = dropout
+
+    def buildGraph(self, weightedInputs):
         # Apply activation function
         self.weightedInputs = weightedInputs
-        if activationFunction is not None:
-            self.activations = activationFunction(weightedInputs)
+
+        if self.activationFunction is not None:
+            self.activations = self.activationFunction(weightedInputs)
         else:
             self.activations = weightedInputs
         if not isinstance(self.activations, tf.Tensor):
             raise TypeError("A layer's activations must be of type TensorFlow.Tensor. Got: " + \
                 str(type(self.activations)))
 
-        self.shape = shape
-
-        self.keepProb = None
-        self.applyDropout = dropout
-        if dropout is True:
+        if self.applyDropout is True:
             self.keepProb = tf.placeholder(tf.float32)
             self.activations = tf.nn.dropout(self.activations, self.keepProb)
 
@@ -36,13 +39,15 @@ class InputLayer(Layer):
             self.inputs = tf.placeholder(dtype=dtype, shape=shape)
             activations = self.inputs
 
-        Layer.__init__(self, shape, activations)
+        Layer.__init__(self, shape)
+        Layer.buildGraph(self, activations)
 
 
 class FullConnectLayer(Layer):
 
     def __init__(self, inLayer, nNodes, activationFunction, dropout=False, wb=None):
 
+        self.inLayer = inLayer
         shape = [inLayer.shape[-1], nNodes]
 
         # Weights and biases. If None were passed in, automatically intialize them.
@@ -52,9 +57,7 @@ class FullConnectLayer(Layer):
             self.weights = wb[0]
             self.biases = wb[1]
 
-        weightedInput = tf.matmul(inLayer.activations, self.weights) + self.biases
-
-        Layer.__init__(self, shape, weightedInput, activationFunction, dropout=dropout)
+        Layer.__init__(self, shape, activationFunction, dropout=dropout)
 
     @staticmethod
     def xavierInit(shape):
@@ -62,6 +65,10 @@ class FullConnectLayer(Layer):
         weights = tf.Variable(tf.random_normal(shape=shape, stddev=xavierStddev))
         biases = tf.Variable(tf.random_normal(shape=[shape[1]], stddev=xavierStddev))
         return [weights, biases]
+
+    def buildGraph(self): 
+        weightedInput = tf.matmul(self.inLayer.activations, self.weights) + self.biases
+        Layer.buildGraph(self, weightedInput)
 
 
 class ConvLayer(Layer):
