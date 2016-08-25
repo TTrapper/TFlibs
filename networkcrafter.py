@@ -40,10 +40,10 @@ class InputLayer(Layer):
             self.activations = self.inputs
 
         Layer.__init__(self, shape)
-
-    def buildGraph(self):
         Layer.buildGraph(self, self.activations)
 
+    def buildGraph(self):
+        pass
 
 class FullConnectLayer(Layer):
 
@@ -357,8 +357,6 @@ class Network:
         for layer in self.layers:
             layer.buildGraph()
         self.outputs = self.outLayer.activations
-        if self.decodeInLayer is not None:
-            self.decodeInLayer.buildGraph();
 
     def forward(self, sess, inputs, keepProb=1, batchSize=1):
         """Do a forward pass through the network and return the result.
