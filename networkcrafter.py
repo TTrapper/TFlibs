@@ -5,20 +5,19 @@ class Layer:
 
     def __init__(self, shape, weightedInputs, activationFunction=None, dropout=False):
 
-        self.weightedInputs = weightedInputs
-
         # Apply activation function
+        self.weightedInputs = weightedInputs
         if activationFunction is not None:
             self.activations = activationFunction(weightedInputs)
         else:
             self.activations = weightedInputs
-
         if not isinstance(self.activations, tf.Tensor):
             raise TypeError("A layer's activations must be of type TensorFlow.Tensor. Got: " + \
                 str(type(self.activations)))
 
         self.shape = shape
 
+        self.keepProb = None
         self.applyDropout = dropout
         if dropout is True:
             self.keepProb = tf.placeholder(tf.float32)
@@ -27,17 +26,17 @@ class Layer:
 
 class InputLayer(Layer):
 
-    def __init__(self, nFeatures, dropout=False, applyOneHot=False, dtype=tf.float32):
+    def __init__(self, nFeatures, applyOneHot=False, dtype=tf.float32):
         shape = [None, nFeatures]
 
         if applyOneHot:
             self.inputs = tf.placeholder(dtype=tf.int32, shape=[None])
             activations = tf.one_hot(self.inputs, nFeatures, dtype=dtype)
         else:
-            self.inputs = tf.placeholder(dtype, shape=shape)
+            self.inputs = tf.placeholder(dtype=dtype, shape=shape)
             activations = self.inputs
 
-        Layer.__init__(self, shape, activations, dropout=dropout)
+        Layer.__init__(self, shape, activations)
 
 
 class FullConnectLayer(Layer):
@@ -245,6 +244,7 @@ class Seq2SeqBasic(Layer):
             return tf.cond(self.feedPrev, feedPredict, feedDecodeIn)
 
         cell = tf.nn.rnn_cell.GRUCell(nNodes)
+        cell = tf.nn.rnn_cell.MultiRNNCell([cell]*2)
         _, encodedState = tf.nn.rnn(cell, encodeInputs, dtype=tf.float32)
         outputs, state = tf.nn.seq2seq.rnn_decoder(decodeInputs, encodedState, cell,\
              loop_function=loopFunction)
@@ -259,17 +259,17 @@ class Seq2SeqBasic(Layer):
 
 class Network:
 
-    def inputLayer(self, nFeatures, dropout=False, applyOneHot=False, dtype=tf.float32):
-        self.inLayer = InputLayer(nFeatures, dropout, applyOneHot, dtype)
+    def inputLayer(self, nFeatures, applyOneHot=False, dtype=tf.float32):
+        self.inLayer = InputLayer(nFeatures, applyOneHot, dtype)
         self.layers = [self.inLayer]
         self.hiddens = []
         self.outLayer = self.inLayer
 
-    def defineDecodeInLayer(self, nFeatures, dropout=False, applyOneHot=False, dtype=tf.float32):
-        self.decodeInLayer = InputLayer(nFeatures, dropout, applyOneHot, dtype)
+    def defineDecodeInLayer(self, nFeatures, applyOneHot=False, dtype=tf.float32):
+        self.decodeInLayer = InputLayer(nFeatures, applyOneHot, dtype)
 
     def defineTargets(self, nNodes, applyOneHot, dtype=tf.float32):
-        self.targets = InputLayer(nNodes, False, applyOneHot, dtype)
+        self.targets = InputLayer(nNodes, applyOneHot, dtype)
         self.targetVals = self.targets.activations
 
     def fullConnectLayer(self,  nNodes, activationFunction, dropout=False, wb=None):
