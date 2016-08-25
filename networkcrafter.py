@@ -196,7 +196,7 @@ class GRU(Layer):
             # Grab weighted representation of the current input
             x_t  = tf.slice(self.xTransform.activations, [idx, 0], [1, -1])
             xU_t = tf.slice(self.xUpdates.activations, [idx, 0], [1, -1])
-            xR_t = tf.slice(eslf.xResets.activations, [idx, 0], [1, -1])
+            xR_t = tf.slice(self.xResets.activations, [idx, 0], [1, -1])
 
             # Reset and update gates
             u = tf.nn.sigmoid(xU_t + tf.matmul(h, self.hUW) + self.hUB)
