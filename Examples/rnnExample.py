@@ -44,6 +44,8 @@ network.reshapeLayer([1, -1, NUM_CHARS])
 network.dynamicGRU(100, nLayers=2)
 network.reshapeLayer([-1, 100])
 network.fullConnectLayer(NUM_CHARS, tf.nn.softmax)
+network.buildGraph()
+
 
 # Create a placeholder for target values. 
 network.defineTargets(NUM_CHARS, applyOneHot=True)

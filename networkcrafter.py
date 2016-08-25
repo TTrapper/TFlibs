@@ -221,30 +221,32 @@ class GRU(Layer):
 class DynamicGRU(Layer):
 
     def __init__(self, inLayer, nNodes, nLayers=1, batchSize=1, dropout=False):
-
+        self.inLayer = inLayer
+        self.nNodes = nNodes
+        self.nLayers = nLayers
+        self.batchSize = batchSize
+        
         # TensorFlow's build in GRU cell
         self.cell = tf.nn.rnn_cell.GRUCell(nNodes)
-
         # Can stack multiple layers
         assert nLayers > 0
         if nLayers > 1:
             self.cell = tf.nn.rnn_cell.MultiRNNCell([self.cell]*nLayers)
-        self.nLayers = nLayers
-        self.batchSize = batchSize
 
-        # Assumption that data has rank-2 on the way in, reshape to get a batch of sequences
-        self.sequence = tf.reshape(inLayer.activations, [batchSize, -1, inLayer.shape[-1]])
         self.h = tf.Variable(tf.zeros([batchSize, nNodes*nLayers]))
-
         Layer.__init__(self, [nNodes, nNodes], dropout=dropout)
 
-    def buildGraph(self): 
+    def buildGraph(self):
+        # Assumption that data has rank-2 on the way in, reshape to get a batch of sequences
+        self.sequence = \
+            tf.reshape(self.inLayer.activations, [self.batchSize, -1, self.inLayer.shape[-1]])
+        # Create outputs and state graph
         outputs, state = \
             tf.nn.dynamic_rnn(self.cell, self.sequence, initial_state=self.h, dtype=tf.float32)
         # Control depency forces the hidden state to persist
         with tf.control_dependencies([self.h.assign(state)]):
             # Squeeze the batches back together
-            activations = tf.reshape(outputs, [-1, nNodes])
+            activations = tf.reshape(outputs, [-1, self.nNodes])
         
         Layer.buildGraph(self, activations)
 
