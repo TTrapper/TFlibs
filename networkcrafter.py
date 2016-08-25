@@ -146,7 +146,7 @@ class RNN(Layer):
 
             return hPlusX
 
-        activations = tf.scan(scanInputs, xTransform.activations, initializer=self.h)
+        activations = tf.scan(scanInputs, self.xTransform.activations, initializer=self.h)
         Layer.buildGraph(self, activations)
 
     def resetHiddenLayer(self, sess):
