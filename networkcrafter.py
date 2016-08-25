@@ -156,8 +156,7 @@ class RNN(Layer):
 class GRU(Layer):
 
     def __init__(self, inLayer, nNodes, dropout=False):
-
-        self.nTimeSteps = tf.shape(inLayer.activations)[0]
+        self.inLayer = inLayer
 
         # Rerepresent inputs with same Dims as hidden state. Also reset and input gates.
         self.xTransform = FullConnectLayer(inLayer, nNodes, None)
@@ -180,7 +179,8 @@ class GRU(Layer):
         Layer.__init__(self, [nNodes, nNodes], dropout=dropout)
 
     def buildGraph(self):
-
+        self.nTimeSteps = tf.shape(self.inLayer.activations)[0]
+        
         self.xTransform.buildGraph()
         self.xResets.buildGraph()
         self.xUpdates.buildGraph()
