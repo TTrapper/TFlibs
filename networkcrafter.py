@@ -96,11 +96,12 @@ class PoolLayer(Layer):
         self.inLayer = inLayer
         self.poolSize = poolSize
         self.strides = strides
+        self.poolType = poolType
         Layer.__init__(self, poolSize, dropout=dropout)
 
     def buildGraph(self):
-        pool = poolType(self.inLayer.activations, ksize=self.poolSize, strides=selfstrides,\
-            padding='SAME')
+        pool = self.poolType(self.inLayer.activations, ksize=self.poolSize, \
+            strides=self.strides, padding='SAME')
         Layer.buildGraph(self, pool)
 
 
@@ -112,7 +113,7 @@ class ReshapeLayer(Layer):
 
     def buildGraph(self):
         activations = tf.reshape(self.inLayer.activations, self.shape)
-
+        Layer.buildGraph(self, activations)
 
 class RNN(Layer):
 

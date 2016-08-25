@@ -21,7 +21,7 @@ network.poolLayer(poolSize=[1, 2, 2, 1])
 network.reshapeLayer(newShape=[-1, 7*7*64])
 network.fullConnectLayer(nNodes=1024, activationFunction=tf.nn.relu, dropout=True)
 network.fullConnectLayer(nNodes=10, activationFunction=tf.nn.softmax)
-
+network.buildGraph()
 
 # Do a forward pass through the network. For layers with dropout the keep_prob is 0.9
 sess.run(tf.initialize_all_variables())
