@@ -68,7 +68,7 @@ class FullConnectLayer(Layer):
         biases = tf.Variable(tf.random_normal(shape=[shape[1]], stddev=xavierStddev))
         return [weights, biases]
 
-    def buildGraph(self): 
+    def buildGraph(self):
         weightedInput = tf.matmul(self.inLayer.activations, self.weights) + self.biases
         Layer.buildGraph(self, weightedInput)
 
@@ -83,7 +83,7 @@ class ConvLayer(Layer):
         self.biases = tf.Variable(tf.constant(0.1, shape=[filterSize[-1]]))
         Layer.__init__(self, filterSize, activationFunction, dropout=dropout)
 
-    def buildGraph(self):        
+    def buildGraph(self):
         conv = tf.nn.conv2d(self.inLayer.activations, self.weights, self.strides,\
             padding='SAME') + self.biases
         Layer.buildGraph(self, conv)
@@ -134,7 +134,7 @@ class RNN(Layer):
         Layer.__init__(self, [nNodes, nNodes], dropout=dropout)
 
     def buildGraph(self):
-        self.xTransform.buildGraph()    
+        self.xTransform.buildGraph()
 
         # Function used by scan, applied to each input example
         def scanInputs(h,x):
@@ -180,11 +180,11 @@ class GRU(Layer):
 
     def buildGraph(self):
         self.nTimeSteps = tf.shape(self.inLayer.activations)[0]
-        
+
         self.xTransform.buildGraph()
         self.xResets.buildGraph()
         self.xUpdates.buildGraph()
-        
+
         # Loop counter
         index = tf.constant(0, dtype=tf.int32)
         loopParams = [index,\
@@ -211,7 +211,7 @@ class GRU(Layer):
         # The update loop runs for each example in the batch.
         condition = lambda idx, h, activations: tf.less(idx, self.nTimeSteps)
         _, _, hStates = tf.while_loop(condition, updateLoopBody, loopParams)
-    
+
         Layer.buildGraph(self, hStates.concat())
 
     def resetHiddenLayer(self, sess):
@@ -225,7 +225,7 @@ class DynamicGRU(Layer):
         self.nNodes = nNodes
         self.nLayers = nLayers
         self.batchSize = batchSize
-        
+
         # TensorFlow's build in GRU cell
         self.cell = tf.nn.rnn_cell.GRUCell(nNodes)
         # Can stack multiple layers
@@ -247,7 +247,7 @@ class DynamicGRU(Layer):
         with tf.control_dependencies([self.h.assign(state)]):
             # Squeeze the batches back together
             activations = tf.reshape(outputs, [-1, self.nNodes])
-        
+
         Layer.buildGraph(self, activations)
 
     def resetHiddenLayer(self, sess):
