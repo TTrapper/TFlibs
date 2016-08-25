@@ -1,8 +1,24 @@
 import numpy as np
 import networkcrafter as nc
 import tensorflow as tf
-import PythonTools.batchingTools as bt
+import PythonTools.charIntTools as cit
 
+someText = "This is a random bit of words that we will attempt train on. For this example, we are not concerned about overfitting the data. In fact, the network will have so little information that it will likely need to simply memorize the answers as best it can. The goal is to get a proof-of-concept for some curiosity's sake."
+
+nums, chr2Int = cit.intListFromString(someText)
+int2Char = cit.swapDictionary(chr2Int)
+
+someText = []
+word = []
+for n in nums:
+    if int2Char[n] is not ' ':
+        word.append(n)
+    else:
+        someText.append(word)
+        word = []
+someText.append(word)
+
+print someText
 
 BATCH_SIZE = 2
 
@@ -26,9 +42,7 @@ print targets
 
 enLayer = nc.InputLayer(nFeatures=1)
 deLayer = nc.InputLayer(nFeatures=1)
-
 seq2seq = nc.Seq2SeqBasic(enLayer, deLayer, 6, enSeqLength, deSeqLength)
-
 readout = nc.FullConnectLayer(seq2seq, nNodes=2, activationFunction=tf.nn.softmax)
 
 
