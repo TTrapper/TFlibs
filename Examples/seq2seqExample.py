@@ -38,27 +38,29 @@ targets = np.zeros([deData.shape[0], 2])
 for i, t in enumerate(targs):
     targets[i,t] = 1
 
+print "Targets:"
 print targets
 
-enLayer = nc.InputLayer(nFeatures=1)
-deLayer = nc.InputLayer(nFeatures=1)
-seq2seq = nc.Seq2SeqBasic(enLayer, deLayer, 6, enSeqLength, deSeqLength)
-readout = nc.FullConnectLayer(seq2seq, nNodes=2, activationFunction=tf.nn.softmax)
-
+network = nc.Network()
+network.inputLayer(nFeatures=1)
+network.defineDecodeInLayer(nFeatures=1)
+network.seq2SeqBasic(6, enSeqLength, deSeqLength, None)
+network.fullConnectLayer( nNodes=2, activationFunction=tf.nn.softmax)
+network.buildGraph()
 
 sess = tf.InteractiveSession()
 sess.run(tf.initialize_all_variables())
 
-feed={enLayer.activations:enData, deLayer.activations:deData}
+feed=network.getFeedDict(enData, decoderInputs=deData)
 
 print "Untrained outputs:"
-print sess.run(readout.activations, feed_dict=feed)
+print sess.run(network.outputs, feed_dict=feed)
 
-cost = tf.nn.softmax_cross_entropy_with_logits(readout.weightedInputs, targets)
+cost = tf.nn.softmax_cross_entropy_with_logits(network.outLayer.weightedInputs, targets)
 train = tf.train.GradientDescentOptimizer(1e-1).minimize(cost)
 
 for i in range(50):
     sess.run(train, feed_dict=feed)
 
 print "Trained outputs:"
-print sess.run(readout.activations, feed_dict=feed)
+print sess.run(network.outputs, feed_dict=feed)

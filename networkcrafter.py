@@ -258,15 +258,15 @@ class Seq2SeqBasic(Layer):
 
     def __init__(self, encodeInLayer, decodeInLayer, nNodes, enSeqLength, deSeqLength, wb=None):
 
-
+        self.nNodes = nNodes
         nFeaturesEn = encodeInLayer.shape[-1]
         nFeaturesDe = decodeInLayer.shape[-1]
 
         self.encodeInputs = tf.reshape(encodeInLayer.activations, [-1, enSeqLength, nFeaturesEn])
         self.decodeInputs = tf.reshape(decodeInLayer.activations, [-1, deSeqLength, nFeaturesDe])
 
-        self.encodeInputs = tf.unpack(self.encodeInputs, self.enSeqLength, axis=1)
-        self.decodeInputs = tf.unpack(self.decodeInputs, self.deSeqLength, axis=1)
+        self.encodeInputs = tf.unpack(self.encodeInputs, enSeqLength, axis=1)
+        self.decodeInputs = tf.unpack(self.decodeInputs, deSeqLength, axis=1)
 
         # Passed to decoder, determines whether to pass in the decodeInputs or the prvious pred
         self.feedPrev = tf.Variable(tf.constant(False))
@@ -284,16 +284,16 @@ class Seq2SeqBasic(Layer):
             return tf.cond(self.feedPrev, feedPredict, feedDecodeIn)
         self.loopFunction = loopFunction
 
-        Layer.__init__(self, [nNodes], activations)
+        Layer.__init__(self, [nNodes])
 
     def buildGraph(self):
 
         _, encodedState = tf.nn.rnn(self.cell, self.encodeInputs, dtype=tf.float32)
-        outputs, state = tf.nn.seq2seq.rnn_decoder(self.decodeInputs, self.encodedState, \
+        outputs, state = tf.nn.seq2seq.rnn_decoder(self.decodeInputs, encodedState, \
             self.cell, loop_function=self.loopFunction)
 
         activations = tf.concat(1, outputs)
-        activations = tf.reshape(activations, [-1, nNodes])
+        activations = tf.reshape(activations, [-1, self.nNodes])
         Layer.buildGraph(self, activations)
 
     def setFeedPrevious(self, boolVal, sess):
@@ -357,7 +357,8 @@ class Network:
         for layer in self.layers:
             layer.buildGraph()
         self.outputs = self.outLayer.activations
-
+        if self.decodeInLayer is not None:
+            self.decodeInLayer.buildGraph();
 
     def forward(self, sess, inputs, keepProb=1, batchSize=1):
         """Do a forward pass through the network and return the result.
