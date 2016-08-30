@@ -32,15 +32,14 @@ class InputLayer(Layer):
     def __init__(self, nFeatures, applyOneHot=False, dtype=tf.float32):
         shape = [None, nFeatures]
 
+        Layer.__init__(self, shape)
         if applyOneHot:
             self.inputs = tf.placeholder(dtype=tf.int32, shape=[None])
             self.activations = tf.one_hot(self.inputs, nFeatures, dtype=dtype)
         else:
             self.inputs = tf.placeholder(dtype=dtype, shape=shape)
             self.activations = self.inputs
-
-        Layer.__init__(self, shape)
-        Layer.buildGraph(self, self.activations)
+            Layer.buildGraph(self, self.activations)
 
     def buildGraph(self):
         pass
@@ -274,11 +273,18 @@ class Seq2SeqBasic(Layer):
         self.cell = tf.nn.rnn_cell.GRUCell(nNodes)
         self.cell = tf.nn.rnn_cell.MultiRNNCell([self.cell]*2)
 
+
         def loopFunction(prev, i):
+
             feedDecodeIn = lambda : self.decodeInputs[i]
             # Use output projection weights if provided
             if wb is not None:
                 prev = tf.matmul(prev, wb[0]) + wb[1]
+#            if outNet is not None:
+#                wb.setInputs(prev)
+#                wb.buildGraph()
+                prev = wb.outputs
+
             feedPredict = lambda : tf.one_hot(tf.argmax(prev, 1), nFeaturesDe)
 
             return tf.cond(self.feedPrev, feedPredict, feedDecodeIn)
@@ -358,14 +364,23 @@ class Network:
             layer.buildGraph()
         self.outputs = self.outLayer.activations
 
-    def forward(self, sess, inputs, keepProb=1, batchSize=1):
+    def setInputs(self, inputTensor):
+        self.inLayer.activations = inputTensor
+
+    def graftOn(self, net):
+        net.layers[1].inLayer = self.outLayer
+        for i, layer in enumerate(net.layers):
+            if i > 0:
+                self.__addLayer__(layer)
+
+    def forward(self, sess, inputs, keepProb=1, batchSize=1, decoderInputs=None):
         """Do a forward pass through the network and return the result.
 
         inputs -- The input data
         keepProb -- For layers with dropout, the probability of keeping each node
 
         """
-        feedDict = self.getFeedDict(inputs, keepProb)
+        feedDict = self.getFeedDict(inputs, keepProb, decoderInputs=decoderInputs)
 
         output = self.outLayer.activations
         if batchSize > 1:

@@ -71,6 +71,41 @@ class TestLayerGraphBuild(unittest.TestCase):
         self.assertTrue(abs(numKept-numExpected) < 100)
 
 
+class TestLayerOutputs(unittest.TestCase):
+
+    def test_seq2SeqBasic_feedPrev(self):
+
+        nNodes = 100
+        nOut = 2
+        nIn = 5
+        outLen = 4
+        inLen = 3
+
+        encodeIn = nc.InputLayer(nIn, applyOneHot=True)
+        decodeIn = nc.InputLayer(nOut, applyOneHot=True)
+        wb = nc.FullConnectLayer.xavierInit([nNodes, nOut])
+
+        seq2seq = nc.Seq2SeqBasic(encodeIn, decodeIn, nNodes, inLen, outLen, wb)
+        seq2seq.buildGraph()
+
+        readout = nc.FullConnectLayer(seq2seq, nOut, None, wb=wb)
+        readout.buildGraph()
+
+        enData = np.ones([inLen])
+        deData = np.ones([outLen])
+
+        sess.run(tf.initialize_all_variables())
+
+        feed = {encodeIn.inputs:enData, decodeIn.inputs:deData}
+        outFeedDecode = sess.run(seq2seq.activations, feed_dict=feed).tolist()
+        seq2seq.setFeedPrevious(True, sess)
+        outFeedPrev = sess.run(seq2seq.activations, feed_dict=feed).tolist()
+        readoutFeedDecode = sess.run(readout.activations, feed_dict=feed).tolist()
+
+        self.assertFalse(outFeedDecode == outFeedPrev)
+
+
+
 if __name__ == '__main__':
     with tf.Session() as sess:
         unittest.main()
