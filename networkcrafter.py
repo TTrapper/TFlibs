@@ -51,6 +51,8 @@ class FullConnectLayer(Layer):
         self.inLayer = inLayer
         shape = [inLayer.shape[-1], nNodes]
 
+        print "IN ", inLayer
+
         # Weights and biases. If None were passed in, automatically intialize them.
         if wb is None:
             self.weights, self.biases = FullConnectLayer.xavierInit(shape)
@@ -255,7 +257,8 @@ class DynamicGRU(Layer):
 
 class Seq2SeqBasic(Layer):
 
-    def __init__(self, encodeInLayer, decodeInLayer, nNodes, enSeqLength, deSeqLength, wb=None):
+    def __init__(self, 
+                 encodeInLayer, decodeInLayer, nNodes, enSeqLength, deSeqLength, readout=None):
 
         self.nNodes = nNodes
         nFeaturesEn = encodeInLayer.shape[-1]
@@ -273,20 +276,15 @@ class Seq2SeqBasic(Layer):
         self.cell = tf.nn.rnn_cell.GRUCell(nNodes)
         self.cell = tf.nn.rnn_cell.MultiRNNCell([self.cell]*2)
 
-
+        self.readout = readout
         def loopFunction(prev, i):
-
             feedDecodeIn = lambda : self.decodeInputs[i]
-            # Use output projection weights if provided
-            if wb is not None:
-                prev = tf.matmul(prev, wb[0]) + wb[1]
-#            if outNet is not None:
-#                wb.setInputs(prev)
-#                wb.buildGraph()
-                prev = wb.outputs
-
+            # Use readout graph provided to set the previous value to the network's output
+            if self.readout is not None:
+                self.readout.layers[1].inLayer.activations = prev
+                self.readout.buildGraph()
+                prev = self.readout.outputs
             feedPredict = lambda : tf.one_hot(tf.argmax(prev, 1), nFeaturesDe)
-
             return tf.cond(self.feedPrev, feedPredict, feedDecodeIn)
         self.loopFunction = loopFunction
 

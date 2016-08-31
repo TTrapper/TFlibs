@@ -42,6 +42,8 @@ print net1.forward(sess, 2*np.ones([2,10]))
 print sess.run(net1.outputs)
 
 
+"""Build a seq2seq and graft a readout network on top of it. The readout
+network should also be used when feeding previous values to the decoder"""
 nNodes = 100
 nOut = 2
 nIn = 10
@@ -50,23 +52,32 @@ deLen = 3
 
 readout = nc.Network()
 readout.inputLayer(nNodes)
+readout.fullConnectLayer(nNodes, tf.nn.relu)
 readout.fullConnectLayer(nOut, tf.nn.softmax)
 
 seq2seq = nc.Network()
 seq2seq.inputLayer(nIn)
 seq2seq.defineDecodeInLayer(nOut)
 seq2seq.seq2SeqBasic(nNodes,enLen,deLen,wb=readout)
-readout.buildGraph()
+#readout.buildGraph()
+#seq2seq.buildGraph()
 seq2seq.graftOn(readout)
-
-
 seq2seq.buildGraph()
 
 sess.run(tf.initialize_all_variables())
 
+#The next two printouts should differ except for the first row
+print seq2seq.forward(sess, np.ones([enLen, nIn]), decoderInputs=np.ones([deLen, nOut]))
+seq2seq.layers[1].setFeedPrevious(True, sess)
 print seq2seq.forward(sess, np.ones([enLen, nIn]), decoderInputs=np.ones([deLen, nOut]))
 
 
+print seq2seq.layers
+print seq2seq.layers[-2]
+print seq2seq.layers[-2].inLayer
+print seq2seq.layers[-2].inLayer.activations
 
-
-
+print seq2seq.layers
+print seq2seq.layers[-1]
+print seq2seq.layers[-1].inLayer
+print seq2seq.layers[-1].inLayer.activations
