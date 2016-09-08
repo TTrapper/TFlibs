@@ -64,3 +64,30 @@ for i in range(50):
 
 print "Trained outputs:"
 print sess.run(network.outputs, feed_dict=feed)
+
+
+"""Seq2Seq Using Dynamic RNN"""
+network = nc.Network()
+network.inputLayer(nFeatures=1)
+network.defineDecodeInLayer(nFeatures=1)
+network.seq2SeqDynamic(6, batchSize=BATCH_SIZE)
+network.fullConnectLayer(nNodes=2, activationFunction=tf.nn.softmax)
+network.buildGraph()
+
+sess.run(tf.initialize_all_variables())
+
+
+feed=network.getFeedDict(enData, decoderInputs=deData)
+
+print "Untrained outputs:"
+print sess.run(network.outputs, feed_dict=feed)
+
+cost = tf.nn.softmax_cross_entropy_with_logits(network.outLayer.weightedInputs, targets)
+train = tf.train.GradientDescentOptimizer(1e-1).minimize(cost)
+
+for i in range(50):
+    sess.run(train, feed_dict=feed)
+
+print "Trained outputs:"
+print sess.run(network.outputs, feed_dict=feed)
+

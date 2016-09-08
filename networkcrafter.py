@@ -51,8 +51,6 @@ class FullConnectLayer(Layer):
         self.inLayer = inLayer
         shape = [inLayer.shape[-1], nNodes]
 
-        print "IN ", inLayer
-
         # Weights and biases. If None were passed in, automatically intialize them.
         if wb is None:
             self.weights, self.biases = FullConnectLayer.xavierInit(shape)
@@ -221,11 +219,14 @@ class GRU(Layer):
 
 class DynamicGRU(Layer):
 
-    def __init__(self, inLayer, nNodes, nLayers=1, batchSize=1, dropout=False):
+    def __init__(self,\
+        inLayer, nNodes, nLayers=1, batchSize=1, dropout=False, initialState=None, saveState=True):
+
         self.inLayer = inLayer
         self.nNodes = nNodes
         self.nLayers = nLayers
         self.batchSize = batchSize
+        self.saveState = saveState
 
         # TensorFlow's build in GRU cell
         self.cell = tf.nn.rnn_cell.GRUCell(nNodes)
@@ -234,7 +235,11 @@ class DynamicGRU(Layer):
         if nLayers > 1:
             self.cell = tf.nn.rnn_cell.MultiRNNCell([self.cell]*nLayers)
 
-        self.h = tf.Variable(tf.zeros([batchSize, nNodes*nLayers]))
+        if initialState is None:
+            self.h = tf.Variable(tf.zeros([batchSize, nNodes*nLayers]))
+        else:
+            self.h = initialState
+
         Layer.__init__(self, [nNodes, nNodes], dropout=dropout)
 
     def buildGraph(self):
@@ -242,11 +247,15 @@ class DynamicGRU(Layer):
         self.sequence = \
             tf.reshape(self.inLayer.activations, [self.batchSize, -1, self.inLayer.shape[-1]])
         # Create outputs and state graph
-        outputs, state = \
+        outputs, self.state = \
             tf.nn.dynamic_rnn(self.cell, self.sequence, initial_state=self.h, dtype=tf.float32)
-        # Control depency forces the hidden state to persist
-        with tf.control_dependencies([self.h.assign(state)]):
-            # Squeeze the batches back together
+
+        if self.saveState:
+            # Control depency forces the hidden state to persist
+            with tf.control_dependencies([self.h.assign(self.state)]):
+                # Squeeze the batches back together
+                activations = tf.reshape(outputs, [-1, self.nNodes])
+        else:
             activations = tf.reshape(outputs, [-1, self.nNodes])
 
         Layer.buildGraph(self, activations)
@@ -257,7 +266,7 @@ class DynamicGRU(Layer):
 
 class Seq2SeqBasic(Layer):
 
-    def __init__(self, 
+    def __init__(self,
                  encodeInLayer, decodeInLayer, nNodes, enSeqLength, deSeqLength, readout=None):
 
         self.nNodes = nNodes
@@ -304,6 +313,26 @@ class Seq2SeqBasic(Layer):
         self.feedPrev.assign(boolVal).eval(session=sess)
 
 
+class Seq2SeqDynamic(Layer):
+
+    def __init__(self, encodeInLayer, decodeInLayer, nNodes, batchSize):
+        self.nNodes = nNodes
+        with tf.variable_scope("rnnEncode"):
+            encodeLayer = DynamicGRU(\
+                encodeInLayer, nNodes, nLayers=1, batchSize=batchSize, saveState=False)
+            encodeLayer.buildGraph()
+        with tf.variable_scope("rnnDecode"):
+            self.decodeLayer = DynamicGRU(decodeInLayer, nNodes, nLayers=1,\
+                 batchSize=batchSize, initialState=encodeLayer.state, saveState=False)
+            self.decodeLayer.buildGraph()
+
+        Layer.__init__(self, [nNodes])
+
+    def buildGraph(self):
+        activations = self.decodeLayer.activations
+        Layer.buildGraph(self, activations)
+
+
 class Network:
 
     def inputLayer(self, nFeatures, applyOneHot=False, dtype=tf.float32):
@@ -347,6 +376,11 @@ class Network:
             raise StandardError("Must define a decodeInLayer for the Seq2Seq model.")
         self.__addLayer__(Seq2SeqBasic(self.outLayer, self.decodeInLayer, nNodes,\
             enSeqLen, deSeqLen, wb))
+
+    def seq2SeqDynamic(self, nNodes, batchSize):
+        if self.decodeInLayer is None:
+            raise StandardError("Must define a decodeInLayer for the Seq2Seq model.")
+        self.__addLayer__(Seq2SeqDynamic(self.outLayer, self.decodeInLayer, nNodes, batchSize))
 
     def __addLayer__(self, layer):
         self.layers.append(layer)
