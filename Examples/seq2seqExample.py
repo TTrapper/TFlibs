@@ -77,7 +77,8 @@ network.buildGraph()
 sess.run(tf.initialize_all_variables())
 
 
-feed=network.getFeedDict(enData, decoderInputs=deData)
+feed=network.getFeedDict(enData, decoderInputs=deData, sequenceLengths=[enSeqLength]*BATCH_SIZE, \
+    decoderSequenceLengths=[deSeqLength]*BATCH_SIZE)
 
 print "Untrained outputs:"
 print sess.run(network.outputs, feed_dict=feed)

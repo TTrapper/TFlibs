@@ -227,6 +227,7 @@ class DynamicGRU(Layer):
         self.nLayers = nLayers
         self.batchSize = batchSize
         self.saveState = saveState
+        self.sequenceLengths = tf.placeholder(dtype=tf.int32, shape=[batchSize], name="GRUSeqLen")
 
         # TensorFlow's build in GRU cell
         self.cell = tf.nn.rnn_cell.GRUCell(nNodes)
@@ -246,9 +247,10 @@ class DynamicGRU(Layer):
         # Assumption that data has rank-2 on the way in, reshape to get a batch of sequences
         self.sequence = \
             tf.reshape(self.inLayer.activations, [self.batchSize, -1, self.inLayer.shape[-1]])
+
         # Create outputs and state graph
-        outputs, self.state = \
-            tf.nn.dynamic_rnn(self.cell, self.sequence, initial_state=self.h, dtype=tf.float32)
+        outputs, self.state = tf.nn.dynamic_rnn(self.cell, self.sequence, \
+            initial_state=self.h, sequence_length=self.sequenceLengths, dtype=tf.float32)
 
         if self.saveState:
             # Control depency forces the hidden state to persist
@@ -406,14 +408,16 @@ class Network:
             if i > 0:
                 self.__addLayer__(layer)
 
-    def forward(self, sess, inputs, keepProb=1, batchSize=1, decoderInputs=None):
+    def forward(self, sess, inputs, keepProb=1, batchSize=1, decoderInputs=None,
+        sequenceLengths=None, decoderSequenceLengths=None):
         """Do a forward pass through the network and return the result.
 
         inputs -- The input data
         keepProb -- For layers with dropout, the probability of keeping each node
 
         """
-        feedDict = self.getFeedDict(inputs, keepProb, decoderInputs=decoderInputs)
+        feedDict = self.getFeedDict(inputs, keepProb, decoderInputs=decoderInputs,
+            sequenceLengths=sequenceLengths, decoderSequenceLengths=decoderSequenceLengths)
 
         output = self.outLayer.activations
         if batchSize > 1:
@@ -423,7 +427,8 @@ class Network:
         return sess.run(output, feed_dict=feedDict)
 
 
-    def getFeedDict(self, inputs, keepProb=1, extras={}, targets=None, decoderInputs=None):
+    def getFeedDict(self, inputs, keepProb=1, extras={}, targets=None, decoderInputs=None,
+        sequenceLengths=None, decoderSequenceLengths=None):
 
         """Create a feed dicionary for tensorflow.
 
@@ -439,6 +444,16 @@ class Network:
         for layer in possibleDropoutLayers:
             if layer.applyDropout:
                 feedDict[layer.keepProb] = keepProb
+            if isinstance(layer, DynamicGRU):
+                if sequenceLengths is None:
+                    raise ValueError("Must specify sequenceLength in feedDict for DynamicGRU")
+                feedDict[layer.sequenceLengths] = sequenceLengths
+            if isinstance(layer, Seq2SeqDynamic):
+                if sequenceLengths is None or decoderSequenceLengths is None:
+                    raise ValueError("Must specify encode and decode sequence lengths" + \
+                        " in feedDict for Seq2SeqDynamic layer.")
+                feedDict[layer.encodeLayer.sequenceLengths] = sequenceLengths
+                feedDict[layer.decodeLayer.sequenceLengths] = decoderSequenceLengths
 
         if targets is not None:
             feedDict[self.targets.inputs] = targets

@@ -63,14 +63,15 @@ start = time.time()
 for i in range(200):
 
     for sources, targets in zip(sourceBatches, targetBatches):
-        feed = network.getFeedDict(sources, 0.5, targets=targets)
+        feed = network.getFeedDict(sources, 0.5, targets=targets, sequenceLengths=sources.shape)
         train_step.run(feed_dict=feed)
 
     network.resetRecurrentHiddens(sess) 
 
     if i%20 == 0:
         for sources, targets in zip(sourceBatches, targetBatches):
-            predictions = np.argmax(network.forward(sess, sources, 1), axis=1)
+            predictions = \
+                np.argmax(network.forward(sess, sources, 1, sequenceLengths=sources.shape), axis=1)
             print ''.join([num2Char[num] for num in predictions])
 
         network.resetRecurrentHiddens(sess) 
