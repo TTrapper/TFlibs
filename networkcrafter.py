@@ -445,15 +445,11 @@ class Network:
             if layer.applyDropout:
                 feedDict[layer.keepProb] = keepProb
             if isinstance(layer, DynamicGRU):
-                if sequenceLengths is None:
-                    raise ValueError("Must specify sequenceLength in feedDict for DynamicGRU")
                 feedDict[layer.sequenceLengths] = sequenceLengths
             if isinstance(layer, Seq2SeqDynamic):
-                if sequenceLengths is None or decoderSequenceLengths is None:
-                    raise ValueError("Must specify encode and decode sequence lengths" + \
-                        " in feedDict for Seq2SeqDynamic layer.")
                 feedDict[layer.encodeLayer.sequenceLengths] = sequenceLengths
-                feedDict[layer.decodeLayer.sequenceLengths] = decoderSequenceLengths
+                if decoderSequenceLengths is not None:
+                    feedDict[layer.decodeLayer.sequenceLengths] = decoderSequenceLengths
 
         if targets is not None:
             feedDict[self.targets.inputs] = targets
