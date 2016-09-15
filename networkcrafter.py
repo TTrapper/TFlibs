@@ -320,6 +320,7 @@ class Seq2SeqDynamic(Layer):
         with tf.variable_scope("rnnEncode"):
             encodeLayer = DynamicGRU(\
                 encodeInLayer, nNodes, nLayers=1, batchSize=batchSize, saveState=False)
+            self.encodeLayer = encodeLayer
             encodeLayer.buildGraph()
         with tf.variable_scope("rnnDecode"):
             self.decodeLayer = DynamicGRU(decodeInLayer, nNodes, nLayers=1,\
