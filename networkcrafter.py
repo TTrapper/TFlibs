@@ -34,10 +34,10 @@ class InputLayer(Layer):
 
         Layer.__init__(self, shape)
         if applyOneHot:
-            self.inputs = tf.placeholder(dtype=tf.int32, shape=[None])
+            self.inputs = tf.placeholder(dtype=tf.int32, shape=[None], name='InputLayer')
             self.activations = tf.one_hot(self.inputs, nFeatures, dtype=dtype)
         else:
-            self.inputs = tf.placeholder(dtype=dtype, shape=shape)
+            self.inputs = tf.placeholder(dtype=dtype, shape=shape, name='InputLayer')
             self.activations = self.inputs
             Layer.buildGraph(self, self.activations)
 
