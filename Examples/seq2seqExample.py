@@ -51,7 +51,7 @@ network.buildGraph()
 sess = tf.InteractiveSession()
 sess.run(tf.initialize_all_variables())
 
-feed=network.getFeedDict(enData, decoderInputs=deData)
+feed=network.getFeedDict(enData, decoderInputs=deData, sequenceLengths=enSeqLength)
 
 print "Untrained outputs:"
 print sess.run(network.outputs, feed_dict=feed)

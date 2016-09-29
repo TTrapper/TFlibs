@@ -275,6 +275,9 @@ class Seq2SeqBasic(Layer):
         nFeaturesEn = encodeInLayer.shape[-1]
         nFeaturesDe = decodeInLayer.shape[-1]
 
+        self.enSequenceLengths = \
+            tf.placeholder(dtype=tf.int32, name="Seq2SeqEnLengths")
+
         self.encodeInputs = tf.reshape(encodeInLayer.activations, [-1, enSeqLength, nFeaturesEn])
         self.decodeInputs = tf.reshape(decodeInLayer.activations, [-1, deSeqLength, nFeaturesDe])
 
@@ -303,8 +306,9 @@ class Seq2SeqBasic(Layer):
 
     def buildGraph(self):
 
-        _, encodedState = tf.nn.rnn(self.cell, self.encodeInputs, dtype=tf.float32)
-        outputs, state = tf.nn.seq2seq.rnn_decoder(self.decodeInputs, encodedState, \
+        _, self.encodedState = tf.nn.rnn(self.cell, self.encodeInputs, dtype=tf.float32,\
+            sequence_length=self.enSequenceLengths)
+        outputs, state = tf.nn.seq2seq.rnn_decoder(self.decodeInputs, self.encodedState, \
             self.cell, loop_function=self.loopFunction)
 
         activations = tf.concat(1, outputs)
@@ -444,6 +448,8 @@ class Network:
         for layer in possibleDropoutLayers:
             if layer.applyDropout:
                 feedDict[layer.keepProb] = keepProb
+            if isinstance(layer, Seq2SeqBasic):
+                feedDict[layer.enSequenceLengths] = sequenceLengths
             if isinstance(layer, DynamicGRU):
                 feedDict[layer.sequenceLengths] = sequenceLengths
             if isinstance(layer, Seq2SeqDynamic):
