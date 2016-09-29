@@ -268,8 +268,8 @@ class DynamicGRU(Layer):
 
 class Seq2SeqBasic(Layer):
 
-    def __init__(self,
-                 encodeInLayer, decodeInLayer, nNodes, enSeqLength, deSeqLength, readout=None):
+    def __init__(self, encodeInLayer, decodeInLayer, nNodes, enSeqLength, deSeqLength,
+        readout=None, feedPrev=False):
 
         self.nNodes = nNodes
         nFeaturesEn = encodeInLayer.shape[-1]
@@ -285,7 +285,7 @@ class Seq2SeqBasic(Layer):
         self.decodeInputs = tf.unpack(self.decodeInputs, deSeqLength, axis=1)
 
         # Passed to decoder, determines whether to pass in the decodeInputs or the prvious pred
-        self.feedPrev = tf.Variable(tf.constant(False))
+        self.feedPrev = tf.Variable(tf.constant(feedPrev))
 
         self.cell = tf.nn.rnn_cell.GRUCell(nNodes)
         self.cell = tf.nn.rnn_cell.MultiRNNCell([self.cell]*2)
@@ -378,11 +378,11 @@ class Network:
     def dynamicGRU(self, nNodes, nLayers=1, batchSize=1, dropout=False):
         self.__addLayer__(DynamicGRU(self.outLayer, nNodes, nLayers, batchSize, dropout=dropout))
 
-    def seq2SeqBasic(self, nNodes, enSeqLen, deSeqLen, wb):
+    def seq2SeqBasic(self, nNodes, enSeqLen, deSeqLen, wb, feedPrev=False):
         if self.decodeInLayer is None:
             raise StandardError("Must define a decodeInLayer for the Seq2Seq model.")
         self.__addLayer__(Seq2SeqBasic(self.outLayer, self.decodeInLayer, nNodes,\
-            enSeqLen, deSeqLen, wb))
+            enSeqLen, deSeqLen, wb, feedPrev))
 
     def seq2SeqDynamic(self, nNodes, batchSize):
         if self.decodeInLayer is None:
