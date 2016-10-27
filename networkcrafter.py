@@ -303,7 +303,7 @@ class BasicGRU(Layer):
         if nLayers > 1:
             self.cell = tf.nn.rnn_cell.MultiRNNCell([self.cell]*nLayers)
 
-        self.h = initialState
+        self.h = tf.Variable(initialState)
 
         Layer.__init__(self, [nNodes, nNodes], dropout=dropout)
 
