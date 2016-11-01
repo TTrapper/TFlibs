@@ -73,36 +73,80 @@ class TestLayerGraphBuild(unittest.TestCase):
 
 class TestLayerOutputs(unittest.TestCase):
 
+    def test_GRUBasic_stateOut(self):
+        nNodes = 2
+        nIn = 4
+        maxInLen = 10
+
+        net = nc.Network()
+        net.inputLayer(nIn, applyOneHot=True)
+        net.basicGRU(nNodes, maxSeqLen=maxInLen, saveState=False, activationsAreFinalState=True)
+        net.buildGraph()
+
+        sess.run(tf.initialize_all_variables())
+        inputs = [1]*maxInLen
+        inLength = 5
+
+        feed = net.getFeedDict(inputs, sequenceLengths=inLength)
+        state, outs = sess.run([net.outputs, net.layers[1].outputs], feed)
+
+        # The final state is not updated past the sequence length (inLength)
+        self.assertTrue(outs[inLength-1].tolist() == state.tolist())
+
+
     def test_seq2SeqBasic_feedPrev(self):
 
-        nNodes = 100
+        nNodes = 3
         nOut = 2
         nIn = 5
-        outLen = 4
+        outLen = 10
         inLen = 3
+
+        readout = nc.Network()
+        readout.inputLayer(nNodes)
+        readout.fullConnectLayer(nOut, None)
 
         encodeIn = nc.InputLayer(nIn, applyOneHot=True)
         decodeIn = nc.InputLayer(nOut, applyOneHot=True)
-        wb = nc.FullConnectLayer.xavierInit([nNodes, nOut])
 
-        seq2seq = nc.Seq2SeqBasic(encodeIn, decodeIn, nNodes, inLen, outLen, wb)
+        seq2seq = nc.Seq2SeqBasic(encodeIn, decodeIn, nNodes, inLen, outLen, readout)
         seq2seq.buildGraph()
 
-        readout = nc.FullConnectLayer(seq2seq, nOut, None, wb=wb)
         readout.buildGraph()
 
         enData = np.ones([inLen])
-        deData = np.ones([outLen])
+        deData = 2*np.ones([outLen])
 
         sess.run(tf.initialize_all_variables())
 
-        feed = {encodeIn.inputs:enData, decodeIn.inputs:deData}
+        feed = {encodeIn.inputs:enData, decodeIn.inputs:deData, seq2seq.enSequenceLengths:[3]}
         outFeedDecode = sess.run(seq2seq.activations, feed_dict=feed).tolist()
         seq2seq.setFeedPrevious(True, sess)
         outFeedPrev = sess.run(seq2seq.activations, feed_dict=feed).tolist()
-        readoutFeedDecode = sess.run(readout.activations, feed_dict=feed).tolist()
+        readoutFeedDecode = sess.run(readout.outLayer.activations, feed_dict=feed).tolist()
+
 
         self.assertFalse(outFeedDecode == outFeedPrev)
+
+
+    def test_concatLayer(self):
+
+        nIn = 8
+        nConcat = 4
+        numExamples = 10
+
+        tensorToConcat = tf.ones([numExamples, nConcat])
+        inputTensor = np.zeros([numExamples, nIn])
+        expectedResult = np.concatenate([inputTensor, tensorToConcat.eval()], axis=1)
+
+        net = nc.Network()
+        net.inputLayer(8)
+        net.concatLayer(tensorToConcat)
+        net.buildGraph()
+
+        out = net.forward(sess, inputTensor)
+
+        self.assertEquals(out.tolist(), expectedResult.tolist())
 
 
 

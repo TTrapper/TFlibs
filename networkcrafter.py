@@ -78,6 +78,18 @@ class FullConnectLayer(Layer):
         weightedInput = weightedInput + self.biases if self.addBias else weightedInput
         Layer.buildGraph(self, weightedInput)
 
+class ConcatLayer(Layer):
+
+    def __init__(self, inLayer, concatTensor, dropout=False):
+        self.inLayer = inLayer
+        self.concatTensor = concatTensor
+        shape = [inLayer.shape[-1] + concatTensor.get_shape().as_list()[-1]]
+
+        Layer.__init__(self, shape, dropout=dropout)
+
+    def buildGraph(self):
+        activations = tf.concat(1, [self.inLayer.activations, self.concatTensor])
+        Layer.buildGraph(self, activations)
 
 class ConvLayer(Layer):
 
@@ -301,9 +313,16 @@ class BasicGRU(Layer):
         self.cell = tf.nn.rnn_cell.GRUCell(nNodes)
         assert nLayers > 0
         if nLayers > 1:
+            raise NotImplementedError("BasicGRU's multi-layer support is currently broken.")
             self.cell = tf.nn.rnn_cell.MultiRNNCell([self.cell]*nLayers)
 
-        self.h = tf.Variable(initialState)
+        if initialState is None:
+            if nLayers > 1:
+                self.h = tf.Variable([[0]*nNodes]*nLayers)
+            else:
+                self.h = tf.Variable(tf.zeros([1, nNodes]))
+        else:
+            self.h = tf.Variable(initialState)
 
         Layer.__init__(self, [nNodes, nNodes], dropout=dropout)
 
@@ -430,6 +449,9 @@ class Network:
         with tf.variable_scope("fullConnect_" + str(len(self.layers))) as scope:
             self.__addLayer__(
                 FullConnectLayer(self.outLayer, nNodes, activationFunction, dropout, addBias))
+
+    def concatLayer(self, concatTensor, dropout=False):
+        self.__addLayer__(ConcatLayer(self.outLayer, concatTensor, dropout))
 
     def convLayer(self, activationFunction, filterSize, strides=[1,1,1,1], dropout=False):
         self.__addLayer__(ConvLayer(self.outLayer, activationFunction, filterSize, strides, dropout))
