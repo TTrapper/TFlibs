@@ -80,11 +80,10 @@ class FullConnectLayer(Layer):
 
 class ConcatLayer(Layer):
 
-    def __init__(self, inLayer, concatTensor, dropout=False):
+    def __init__(self, inLayer, concatTensor, concatTensorLen, dropout=False):
         self.inLayer = inLayer
         self.concatTensor = concatTensor
-        shape = [inLayer.shape[-1] + concatTensor.get_shape().as_list()[-1]]
-
+        shape = [inLayer.shape[-1] + concatTensorLen]
         Layer.__init__(self, shape, dropout=dropout)
 
     def buildGraph(self):
@@ -450,8 +449,8 @@ class Network:
             self.__addLayer__(
                 FullConnectLayer(self.outLayer, nNodes, activationFunction, dropout, addBias))
 
-    def concatLayer(self, concatTensor, dropout=False):
-        self.__addLayer__(ConcatLayer(self.outLayer, concatTensor, dropout))
+    def concatLayer(self, concatTensor, concatTensorLen, dropout=False):
+        self.__addLayer__(ConcatLayer(self.outLayer, concatTensor, concatTensorLen, dropout))
 
     def convLayer(self, activationFunction, filterSize, strides=[1,1,1,1], dropout=False):
         self.__addLayer__(ConvLayer(self.outLayer, activationFunction, filterSize, strides, dropout))

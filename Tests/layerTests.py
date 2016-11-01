@@ -141,7 +141,7 @@ class TestLayerOutputs(unittest.TestCase):
 
         net = nc.Network()
         net.inputLayer(8)
-        net.concatLayer(tensorToConcat)
+        net.concatLayer(tensorToConcat, nConcat)
         net.buildGraph()
 
         out = net.forward(sess, inputTensor)
