@@ -136,11 +136,12 @@ class TestLayerOutputs(unittest.TestCase):
         numExamples = 10
 
         tensorToConcat = tf.ones([numExamples, nConcat])
-        inputTensor = np.zeros([numExamples, nIn])
+        tensorToAdd = tf.constant(np.random.randint(100, size=[numExamples, nConcat]))
+        inputTensor = np.random.randint(100, size=[numExamples, nIn])
         expectedResult = np.concatenate([inputTensor, tensorToConcat.eval()], axis=1)
 
         net = nc.Network()
-        net.inputLayer(8)
+        net.inputLayer(nIn)
         net.concatLayer(tensorToConcat, nConcat)
         net.buildGraph()
 
@@ -149,6 +150,22 @@ class TestLayerOutputs(unittest.TestCase):
         self.assertEquals(out.tolist(), expectedResult.tolist())
 
 
+    def test_addLayer(self):
+
+        nIn = 7
+        numExamples = 10
+
+        tensorToAdd = tf.constant(np.random.randint(100, size=[numExamples, nIn]), dtype=tf.int32)
+        inputTensor = np.random.randint(100, size=[numExamples, nIn])
+        expectedResult = inputTensor + tensorToAdd.eval()
+
+        net = nc.Network()
+        net.inputLayer(nIn, dtype=tf.int32)
+        net.additionLayer(tensorToAdd)
+        net.buildGraph()
+
+        out = net.forward(sess, inputTensor)
+        self.assertEquals(out.tolist(), expectedResult.tolist())
 
 if __name__ == '__main__':
     with tf.Session() as sess:

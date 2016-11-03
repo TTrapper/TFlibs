@@ -64,8 +64,11 @@ class FullConnectLayer(Layer):
 
     def xavierInit(self, shape):
         xavierStddev = np.sqrt(3.0/(shape[0]+shape[1]))
+#        uniformRange = (0.5/shape[1])
         weights = tf.get_variable(
             "weights", shape, initializer=tf.random_normal_initializer(0, xavierStddev))
+#        weights = tf.get_variable(
+#            "weights", shape, initializer=tf.random_uniform_initializer(-uniformRange, uniformRange))
         if self.addBias:
             biases = tf.get_variable(
                 "biases", [shape[1]], initializer=tf.random_normal_initializer(0, xavierStddev))
@@ -88,6 +91,18 @@ class ConcatLayer(Layer):
 
     def buildGraph(self):
         activations = tf.concat(1, [self.inLayer.activations, self.concatTensor])
+        Layer.buildGraph(self, activations)
+
+class AdditionLayer(Layer):
+
+    def __init__(self, inLayer, addTensor, dropout=False):
+        self.inLayer = inLayer
+        self.addTensor = addTensor
+        shape = [inLayer.shape[-1]]
+        Layer.__init__(self, shape, dropout=dropout)
+
+    def buildGraph(self):
+        activations = tf.add(self.inLayer.activations, self.addTensor)
         Layer.buildGraph(self, activations)
 
 class ConvLayer(Layer):
@@ -451,6 +466,9 @@ class Network:
 
     def concatLayer(self, concatTensor, concatTensorLen, dropout=False):
         self.__addLayer__(ConcatLayer(self.outLayer, concatTensor, concatTensorLen, dropout))
+
+    def additionLayer(self, addTensor, dropout=False):
+        self.__addLayer__(AdditionLayer(self.outLayer, addTensor, dropout))
 
     def convLayer(self, activationFunction, filterSize, strides=[1,1,1,1], dropout=False):
         self.__addLayer__(ConvLayer(self.outLayer, activationFunction, filterSize, strides, dropout))
