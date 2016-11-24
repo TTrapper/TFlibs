@@ -52,32 +52,44 @@ class InputLayer(Layer):
 
 class FullConnectLayer(Layer):
 
-    def __init__(self, inLayer, nNodes, activationFunction, dropout=False, addBias=True):
+    def __init__(self, inLayer, nNodes, activationFunction, dropout=False, addBias=True,
+        initType='xavier', wTranspose=False):
 
         self.inLayer = inLayer
+        self.nNodes = nNodes
         self.addBias = addBias
-        shape = [inLayer.shape[-1], nNodes]
+        self.wTranspose = wTranspose
+        shape = [inLayer.shape[-1], nNodes] if not self.wTranspose else [nNodes, inLayer.shape[-1]]
 
-        self.weights, self.biases = self.xavierInit(shape)
+        self.weights, self.biases = self.initWeights(shape, initType)
 
         Layer.__init__(self, shape, activationFunction, dropout=dropout)
 
-    def xavierInit(self, shape):
-        xavierStddev = np.sqrt(3.0/(shape[0]+shape[1]))
-#        uniformRange = (0.5/shape[1])
-        weights = tf.get_variable(
-            "weights", shape, initializer=tf.random_normal_initializer(0, xavierStddev))
-#        weights = tf.get_variable(
-#            "weights", shape, initializer=tf.random_uniform_initializer(-uniformRange, uniformRange))
+    def initWeights(self, shape, initType):
+
+        initializer = self.getInitializer(shape, initType)
+        weights = tf.get_variable("weights", shape, initializer=initializer)
+        biases = False
         if self.addBias:
-            biases = tf.get_variable(
-                "biases", [shape[1]], initializer=tf.random_normal_initializer(0, xavierStddev))
-        else:
-            biases = False
+            biases = tf.get_variable("biases", [self.nNodes], initializer=initializer)
+
         return [weights, biases]
 
+    def getInitializer(self, shape, initType):
+        if initType == 'xavier':
+            xavierStddev = np.sqrt(3.0/(shape[0]+shape[1]))
+            initializer = tf.random_normal_initializer(0, xavierStddev)
+        elif initType == 'uniform':
+            uniformRange = (0.5/self.nNodes)
+            initializer = tf.random_uniform_initializer(-uniformRange, uniformRange)
+        else:
+            raise ValueError("initType (" + initType + ") not in list of allowed values.")
+
+        return initializer
+
     def buildGraph(self):
-        weightedInput = tf.matmul(self.inLayer.activations, self.weights)
+        weightedInput = tf.matmul(
+            self.inLayer.activations, self.weights, transpose_b=self.wTranspose)
         weightedInput = weightedInput + self.biases if self.addBias else weightedInput
         Layer.buildGraph(self, weightedInput)
 
@@ -312,7 +324,7 @@ class DynamicGRU(Layer):
 
 class BasicGRU(Layer):
 
-    def __init__(self, inLayer, nNodes, nLayers, maxSeqLen, dropout=False, initialState=None,
+    def __init__(self, inLayer, nNodes, nLayers, maxSeqLen, batchSize=1, dropout=False, initialState=None,
         saveState=True, activationsAreFinalState=False):
 
         self.inLayer = inLayer
@@ -327,16 +339,15 @@ class BasicGRU(Layer):
         self.cell = tf.nn.rnn_cell.GRUCell(nNodes)
         assert nLayers > 0
         if nLayers > 1:
-            raise NotImplementedError("BasicGRU's multi-layer support is currently broken.")
             self.cell = tf.nn.rnn_cell.MultiRNNCell([self.cell]*nLayers)
 
         if initialState is None:
             if nLayers > 1:
-                self.h = tf.Variable([[0]*nNodes]*nLayers)
+                self.h = tuple([tf.Variable(tf.zeros([batchSize, nNodes]))]*nLayers)
             else:
-                self.h = tf.Variable(tf.zeros([1, nNodes]))
+                self.h = tf.Variable(tf.zeros([batchSize, nNodes]))
         else:
-            self.h = tf.Variable(initialState)
+            self.h = initialState
 
         Layer.__init__(self, [nNodes, nNodes], dropout=dropout)
 
@@ -353,7 +364,7 @@ class BasicGRU(Layer):
 
         if self.saveState:
             # Control depency forces the hidden state to persist
-            with tf.control_dependencies([self.h.assign(self.state)]):
+            with tf.control_dependencies([self.h[i].assign(self.state[i]) for i in range(self.nLayers)]):
                 if self.activationsAreFinalState:
                     activations = self.state
                 else:
@@ -459,10 +470,12 @@ class Network:
         self.targets = InputLayer(nNodes, applyOneHot, dtype)
         self.targetVals = self.targets.activations
 
-    def fullConnectLayer(self,  nNodes, activationFunction, dropout=False, addBias=True):
+    def fullConnectLayer(self,  nNodes, activationFunction, dropout=False, addBias=True,
+        initType='xavier', wTranspose=False):
+
         with tf.variable_scope("fullConnect_" + str(len(self.layers))) as scope:
-            self.__addLayer__(
-                FullConnectLayer(self.outLayer, nNodes, activationFunction, dropout, addBias))
+            self.__addLayer__(FullConnectLayer(self.outLayer, nNodes, activationFunction,
+                dropout, addBias, initType, wTranspose))
 
     def concatLayer(self, concatTensor, concatTensorLen, dropout=False):
         self.__addLayer__(ConcatLayer(self.outLayer, concatTensor, concatTensorLen, dropout))
@@ -487,12 +500,12 @@ class Network:
     def gruLayer(self, nNodes, dropout=False):
         self.__addLayer__(GRU(self.outLayer, nNodes, dropout))
 
-    def basicGRU(self, nNodes, nLayers=1, maxSeqLen=10, dropout=False, initialState=None,
+    def basicGRU(self, nNodes, nLayers=1, maxSeqLen=10, batchSize=1, dropout=False, initialState=None,
         saveState=True, activationsAreFinalState=False):
 
-        self.__addLayer__(BasicGRU(
-            self.outLayer, nNodes, nLayers, maxSeqLen, dropout=dropout, initialState=initialState,
-            saveState=saveState, activationsAreFinalState=activationsAreFinalState))
+        self.__addLayer__(BasicGRU(self.outLayer, nNodes, nLayers, maxSeqLen, batchSize=batchSize,
+            dropout=dropout, initialState=initialState, saveState=saveState,
+            activationsAreFinalState=activationsAreFinalState))
 
     def dynamicGRU(self, nNodes, nLayers=1, batchSize=1, dropout=False, initialState=None,
         saveState=True, activationsAreFinalState=False):
@@ -563,8 +576,10 @@ class Network:
         keepProb -- For layers with dropout, the probability of keeping each node
         extras -- Any values to be added to the dictionary that are external to the network
         """
+        feedDict = {}
         # Define the feed_dict for a forward pass
-        feedDict = {self.inLayer.inputs: inputs}
+        if inputs is not None:
+            feedDict[self.inLayer.inputs] = inputs
         # For each layer with dropout, add its keepProb to feed_dict
         possibleDropoutLayers = [self.inLayer]
         possibleDropoutLayers.extend(self.hiddens)
