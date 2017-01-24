@@ -183,9 +183,11 @@ class TestLayerOutputs(unittest.TestCase):
 
             feed = net.getFeedDict(inputs, sequenceLengths=inLength)
             state, outs = sess.run([net.outputs, net.layers[1].outputs], feed)
+            # Timestep reshaped to dim-0
+            outs = np.reshape(outs, [-1, nNodes])
 
             # The final state is not updated past the sequence length (inLength)
-            self.assertTrue(outs[inLength-1].tolist() == state.tolist())
+            self.assertTrue(outs[inLength-1, :].tolist() == state[0].tolist())
 
 
     def test_seq2SeqBasic_feedPrev(self):

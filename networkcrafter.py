@@ -76,6 +76,7 @@ class FullConnectLayer(Layer):
         return [weights, biases]
 
     def getInitializer(self, shape, initType):
+
         if initType == 'xavier':
             xavierStddev = np.sqrt(3.0/(shape[0]+shape[1]))
             initializer = tf.random_normal_initializer(0, xavierStddev)
@@ -360,7 +361,7 @@ class BasicGRU(Layer):
         # Create outputs and state graph
         outputs, self.state = tf.nn.rnn(self.cell, self.sequence, \
             initial_state=self.h, sequence_length=self.sequenceLengths, dtype=tf.float32)
-        self.outputs = outputs
+        self.outputs = tf.concat(1, outputs)
 
         if self.saveState:
             # Control depency forces the hidden state to persist
@@ -369,12 +370,12 @@ class BasicGRU(Layer):
                     activations = self.state
                 else:
                     # Squeeze the batches back together
-                    activations = tf.reshape(outputs, [-1, self.nNodes])
+                    activations = tf.reshape(self.outputs, [-1, self.nNodes])
         else:
             if self.activationsAreFinalState:
                 activations = self.state
             else:
-                activations = tf.reshape(outputs, [-1, self.nNodes])
+                activations = tf.reshape(self.outputs, [-1, self.nNodes])
 
         Layer.buildGraph(self, activations)
 
