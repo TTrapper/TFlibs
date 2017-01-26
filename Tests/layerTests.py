@@ -195,15 +195,16 @@ class TestLayerOutputs(unittest.TestCase):
         with tf.Session() as sess:
             nNodes = 2
             nIn = 1
-            maxInLen = 10 # This best be even
-            batchSize = 3
+            maxInLen = 4 # This best be even
+            batchSize = 1
             halfSequenceLengths = [maxInLen/2]*batchSize
             fullSequenceLengths = [maxInLen]*batchSize
+            nLayers = 2
 
             with tf.variable_scope("net"):
                 net = nc.Network()
                 net.inputLayer(nIn)
-                net.basicGRU(nNodes, maxSeqLen=maxInLen, batchSize=batchSize, saveState=True)
+                net.basicGRU(nNodes, nLayers=nLayers, maxSeqLen=maxInLen, batchSize=batchSize, saveState=True)
                 net.buildGraph()
                 gru = net.outLayer
 
@@ -211,17 +212,19 @@ class TestLayerOutputs(unittest.TestCase):
 
             # Sequence that repeats itself halfway. Running the first half twice should
             # produce the same result as running the whole sequence.
-            sequence = np.array([[1],[2],[3],[4],[5],[1],[2],[3],[4],[5]]*batchSize)
+            #sequence = np.array([[1],[2],[3],[4],[1],[2],[3],[4]]*batchSize)
+            sequence = np.array([[1],[2],[1],[2]]*batchSize)
 
             # These two should be different (the state should be saved from the first run)
             feed = net.getFeedDict(sequence, sequenceLengths=halfSequenceLengths)
             halfOut1, halfState1 = sess.run([gru.activations, gru.state], feed_dict=feed)
             halfOut2, halfState2 = sess.run([gru.activations, gru.state], feed_dict=feed)
             self.assertTrue(halfOut1.tolist() != halfOut2.tolist())
-            self.assertTrue(halfState1.tolist() != halfState2.tolist())
+            if (gru.nLayers == 1):
+                self.assertTrue(halfState1.tolist() != halfState2.tolist())
 
             # Manually reset the state
-            sess.run(gru.h.assign([[0]*nNodes]*batchSize))
+            gru.resetHiddenLayer(sess)
 
             # The states should be the same as second run above. The outputs should be the
             # same after the zero-d outputs are removed from the end.
@@ -229,11 +232,14 @@ class TestLayerOutputs(unittest.TestCase):
             fullOut, fullSeqState = sess.run([gru.activations, gru.state], feed_dict=feed)
             # Reshape and trim off the ignored outputs
             fullOut = np.reshape(fullOut, [batchSize, maxInLen, nNodes])
+            halfOut1 = np.reshape(halfOut1, [batchSize, maxInLen, nNodes])
+            halfOut2 = np.reshape(halfOut2, [batchSize, maxInLen, nNodes])
             halfOut1 = np.reshape(halfOut1, [batchSize, maxInLen, nNodes])[:,:maxInLen/2,:]
             halfOut2 = np.reshape(halfOut2, [batchSize, maxInLen, nNodes])[:,:maxInLen/2,:]
             outconcat =  np.concatenate([halfOut1, halfOut2], axis=1)
             self.assertTrue(fullOut.tolist() == outconcat.tolist())
-            self.assertTrue(fullSeqState.tolist() == halfState2.tolist())
+            if (gru.nLayers == 1):
+                self.assertTrue(fullSeqState.tolist() == halfState2.tolist())
 
     def test_seq2SeqBasic_feedPrev(self):
 
