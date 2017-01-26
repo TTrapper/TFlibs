@@ -191,28 +191,26 @@ class TestLayerOutputs(unittest.TestCase):
 
 
     def test_GRUBasic_stateSave(self):
-        tf.reset_default_graph()
-        with tf.Session() as sess:
-            nNodes = 2
-            nIn = 1
-            maxInLen = 4 # This best be even
-            batchSize = 1
-            halfSequenceLengths = [maxInLen/2]*batchSize
-            fullSequenceLengths = [maxInLen]*batchSize
-            nLayers = 2
 
-            with tf.variable_scope("net"):
-                net = nc.Network()
-                net.inputLayer(nIn)
-                net.basicGRU(nNodes, nLayers=nLayers, maxSeqLen=maxInLen, batchSize=batchSize, saveState=True)
-                net.buildGraph()
-                gru = net.outLayer
+        nNodes = 2
+        nIn = 1
+        maxInLen = 4 # This best be even
+        batchSize = 2
+        halfSequenceLengths = [maxInLen/2]*batchSize
+        fullSequenceLengths = [maxInLen]*batchSize
 
-            sess.run(tf.global_variables_initializer())
+        def getNetwork(nLayers):
+            net = nc.Network()
+            net.inputLayer(nIn)
+            net.basicGRU(nNodes, nLayers=nLayers, maxSeqLen=maxInLen, batchSize=batchSize, saveState=True)
+            net.buildGraph()
+            gru = net.outLayer
 
+            return net, gru
+
+        def doTests():
             # Sequence that repeats itself halfway. Running the first half twice should
             # produce the same result as running the whole sequence.
-            #sequence = np.array([[1],[2],[3],[4],[1],[2],[3],[4]]*batchSize)
             sequence = np.array([[1],[2],[1],[2]]*batchSize)
 
             # These two should be different (the state should be saved from the first run)
@@ -240,6 +238,18 @@ class TestLayerOutputs(unittest.TestCase):
             self.assertTrue(fullOut.tolist() == outconcat.tolist())
             if (gru.nLayers == 1):
                 self.assertTrue(fullSeqState.tolist() == halfState2.tolist())
+
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+            with tf.variable_scope("netSingleLayer"):
+                net, gru = getNetwork(nLayers=1)
+            sess.run(tf.global_variables_initializer())
+            doTests()
+
+            with tf.variable_scope("netMultiLayer"):
+                net, gru = getNetwork(nLayers=3)
+            sess.run(tf.global_variables_initializer())
+            doTests()
 
     def test_seq2SeqBasic_feedPrev(self):
 
