@@ -344,9 +344,9 @@ class BasicGRU(Layer):
 
         if initialState is None:
             if nLayers > 1:
-                self.h = tuple([tf.Variable(tf.zeros([batchSize, nNodes]))]*nLayers)
+                self.h = tuple([tf.Variable(tf.zeros([batchSize, nNodes]), trainable=False)]*nLayers)
             else:
-                self.h = tf.Variable(tf.zeros([batchSize, nNodes]))
+                self.h = tf.Variable(tf.zeros([batchSize, nNodes]), trainable=False)
         else:
             self.h = initialState
 
@@ -361,26 +361,31 @@ class BasicGRU(Layer):
         # Create outputs and state graph
         outputs, self.state = tf.nn.rnn(self.cell, self.sequence, \
             initial_state=self.h, sequence_length=self.sequenceLengths, dtype=tf.float32)
-        self.outputs = tf.concat(1, outputs)
+        outputs = tf.concat(1, outputs)
+        self.rnnOutputs = outputs
 
         if self.saveState:
             # Control depency forces the hidden state to persist
-            with tf.control_dependencies([self.h[i].assign(self.state[i]) for i in range(self.nLayers)]):
-                if self.activationsAreFinalState:
-                    activations = self.state
-                else:
-                    # Squeeze the batches back together
-                    activations = tf.reshape(self.outputs, [-1, self.nNodes])
-        else:
-            if self.activationsAreFinalState:
-                activations = self.state
+            if (self.nLayers > 1):
+                with tf.control_dependencies([self.h[i].assign(self.state[i]) for i in range(self.nLayers)]): 
+                    activations = self._getActivations(outputs)
             else:
-                activations = tf.reshape(self.outputs, [-1, self.nNodes])
+                with tf.control_dependencies([self.h.assign(self.state)]):
+                    activations = self._getActivations(outputs)
+        else:
+            activations = self._getActivations(outputs)
 
         Layer.buildGraph(self, activations)
 
     def resetHiddenLayer(self, sess):
         self.h.assign(tf.zeros([self.batchSize, self.shape[0]*self.nLayers])).eval(session=sess)
+
+    def _getActivations(self, outputs):
+        if self.activationsAreFinalState:
+            return tf.identity(self.state)
+        else:
+            # Squeeze the batches back together
+            return tf.reshape(outputs, [-1, self.nNodes])
 
 class Seq2SeqBasic(Layer):
 
@@ -433,7 +438,6 @@ class Seq2SeqBasic(Layer):
 
     def setFeedPrevious(self, boolVal, sess):
         self.feedPrev.assign(boolVal).eval(session=sess)
-
 
 class Seq2SeqDynamic(Layer):
 

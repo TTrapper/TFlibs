@@ -93,7 +93,7 @@ class TestLayerOutputs(unittest.TestCase):
             net.inputLayer(nIn, applyOneHot=True)
             net.fullConnectLayer(nNodes, None)
             net.buildGraph()
-            sess.run(tf.initialize_all_variables())
+            sess.run(tf.global_variables_initializer())
 
             fullLayer = net.layers[1]
             weights = fullLayer.weights.eval(sess)
@@ -121,7 +121,7 @@ class TestLayerOutputs(unittest.TestCase):
             net.inputLayer(nIn, applyOneHot=True)
             net.fullConnectLayer(nNodes, None, addBias=False)
             net.buildGraph()
-            sess.run(tf.initialize_all_variables())
+            sess.run(tf.global_variables_initializer())
 
             fullLayer = net.layers[1]
             weights = fullLayer.weights.eval(sess)
@@ -148,7 +148,7 @@ class TestLayerOutputs(unittest.TestCase):
             net.inputLayer(nIn, applyOneHot=True)
             net.fullConnectLayer(nNodes, None, wTranspose=True)
             net.buildGraph()
-            sess.run(tf.initialize_all_variables())
+            sess.run(tf.global_variables_initializer())
 
             fullLayer = net.layers[1]
             weights = fullLayer.weights.eval(sess)
@@ -177,18 +177,63 @@ class TestLayerOutputs(unittest.TestCase):
             net.basicGRU(nNodes, maxSeqLen=maxInLen, saveState=False, activationsAreFinalState=True)
             net.buildGraph()
 
-            sess.run(tf.initialize_all_variables())
+            sess.run(tf.global_variables_initializer())
             inputs = [1]*maxInLen
             inLength = 5
 
             feed = net.getFeedDict(inputs, sequenceLengths=inLength)
-            state, outs = sess.run([net.outputs, net.layers[1].outputs], feed)
+            state, outs = sess.run([net.outputs, net.layers[1].rnnOutputs], feed)
             # Timestep reshaped to dim-0
             outs = np.reshape(outs, [-1, nNodes])
 
             # The final state is not updated past the sequence length (inLength)
             self.assertTrue(outs[inLength-1, :].tolist() == state[0].tolist())
 
+
+    def test_GRUBasic_stateSave(self):
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+            nNodes = 2
+            nIn = 1
+            maxInLen = 10 # This best be even
+            batchSize = 3
+            halfSequenceLengths = [maxInLen/2]*batchSize
+            fullSequenceLengths = [maxInLen]*batchSize
+
+            with tf.variable_scope("net"):
+                net = nc.Network()
+                net.inputLayer(nIn)
+                net.basicGRU(nNodes, maxSeqLen=maxInLen, batchSize=batchSize, saveState=True)
+                net.buildGraph()
+                gru = net.outLayer
+
+            sess.run(tf.global_variables_initializer())
+
+            # Sequence that repeats itself halfway. Running the first half twice should
+            # produce the same result as running the whole sequence.
+            sequence = np.array([[1],[2],[3],[4],[5],[1],[2],[3],[4],[5]]*batchSize)
+
+            # These two should be different (the state should be saved from the first run)
+            feed = net.getFeedDict(sequence, sequenceLengths=halfSequenceLengths)
+            halfOut1, halfState1 = sess.run([gru.activations, gru.state], feed_dict=feed)
+            halfOut2, halfState2 = sess.run([gru.activations, gru.state], feed_dict=feed)
+            self.assertTrue(halfOut1.tolist() != halfOut2.tolist())
+            self.assertTrue(halfState1.tolist() != halfState2.tolist())
+
+            # Manually reset the state
+            sess.run(gru.h.assign([[0]*nNodes]*batchSize))
+
+            # The states should be the same as second run above. The outputs should be the
+            # same after the zero-d outputs are removed from the end.
+            feed = net.getFeedDict(sequence, sequenceLengths=fullSequenceLengths)
+            fullOut, fullSeqState = sess.run([gru.activations, gru.state], feed_dict=feed)
+            # Reshape and trim off the ignored outputs
+            fullOut = np.reshape(fullOut, [batchSize, maxInLen, nNodes])
+            halfOut1 = np.reshape(halfOut1, [batchSize, maxInLen, nNodes])[:,:maxInLen/2,:]
+            halfOut2 = np.reshape(halfOut2, [batchSize, maxInLen, nNodes])[:,:maxInLen/2,:]
+            outconcat =  np.concatenate([halfOut1, halfOut2], axis=1)
+            self.assertTrue(fullOut.tolist() == outconcat.tolist())
+            self.assertTrue(fullSeqState.tolist() == halfState2.tolist())
 
     def test_seq2SeqBasic_feedPrev(self):
 
@@ -216,7 +261,7 @@ class TestLayerOutputs(unittest.TestCase):
             enData = np.ones([inLen])
             deData = 2*np.ones([outLen])
 
-            sess.run(tf.initialize_all_variables())
+            sess.run(tf.global_variables_initializer())
 
             feed = {encodeIn.inputs:enData, decodeIn.inputs:deData, seq2seq.enSequenceLengths:[3]}
             outFeedDecode = sess.run(seq2seq.activations, feed_dict=feed).tolist()
