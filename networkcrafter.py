@@ -367,27 +367,28 @@ class BasicGRU(Layer):
             initial_state=self.h, sequence_length=self.sequenceLengths, dtype=tf.float32)
         self.outSequence = tf.concat(1, outputs)
 
-
         if self.saveState:
             # Control depency forces the hidden state to persist
-            if (self.nLayers > 1):
-                with tf.control_dependencies(
-                    [self.h[i].assign(self.state[i]) for i in range(self.nLayers)]):
-                    activations = self._getActivations(self.outSequence)
-            else:
-                with tf.control_dependencies([self.h.assign(self.state)]):
-                    activations = self._getActivations(self.outSequence)
+            with tf.control_dependencies([self._assignInitialStateOp(self.state)]):
+                activations = self._getActivations(self.outSequence)
         else:
             activations = self._getActivations(self.outSequence)
 
         Layer.buildGraph(self, activations)
 
-    def resetHiddenLayer(self, sess):
-        zeroState = self.cell.zero_state(self.batchSize, tf.float32)
+    def resetHiddenLayer(self, sess, newState=None):
+        if newState is None:
+            newState = self.cell.zero_state(self.batchSize, tf.float32)
+        sess.run(self._assignInitialStateOp(newState))
+
+    def _assignInitialStateOp(self, newState):
         if self.nLayers > 1:
-            [self.h[i].assign(state).eval(session=sess) for i, state in enumerate(zeroState)]
+            """ Bit of a hack here, returning a useless identy op.
+                The desired assign op is forced by control_dependencies. """
+            with tf.control_dependencies([self.h[i].assign(state) for i, state in enumerate(newState)]):
+                return tf.identity(1)
         else:
-            self.h.assign(zeroState).eval(session=sess)
+            return self.h.assign(newState)
 
     def _getActivations(self, outputs):
         if self.activationsAreFinalState:
