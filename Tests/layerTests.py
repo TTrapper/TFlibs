@@ -166,29 +166,42 @@ class TestLayerOutputs(unittest.TestCase):
 
 
     def test_GRUBasic_stateOut(self):
-        tf.reset_default_graph()
-        with tf.Session() as sess:
-            nNodes = 2
-            nIn = 4
-            maxInLen = 10
 
+        nNodes = 2
+        nIn = 4
+        maxInLen = 10
+        inputs = [1]*maxInLen
+        inLength = 5
+
+        def getNetwork(nLayers):
             net = nc.Network()
             net.inputLayer(nIn, applyOneHot=True)
-            net.basicGRU(nNodes, maxSeqLen=maxInLen, saveState=False, activationsAreFinalState=True)
+            net.basicGRU(nNodes, nLayers=nLayers,  maxSeqLen=maxInLen, saveState=False, activationsAreFinalState=True)
             net.buildGraph()
+            gru = net.outLayer
+            return net, gru
+
+        def doTests():
 
             sess.run(tf.global_variables_initializer())
-            inputs = [1]*maxInLen
-            inLength = 5
 
             feed = net.getFeedDict(inputs, sequenceLengths=inLength)
-            state, outs = sess.run([net.outputs, net.layers[1].rnnOutputs], feed)
+            finalState, outSequence = sess.run([net.outputs, gru.outSequence], feed)
             # Timestep reshaped to dim-0
-            outs = np.reshape(outs, [-1, nNodes])
+            outSequence = np.reshape(outSequence, [-1, nNodes])
 
-            # The final state is not updated past the sequence length (inLength)
-            self.assertTrue(outs[inLength-1, :].tolist() == state[0].tolist())
+            # network output is the final state which is the output at time inLength
+            self.assertTrue(outSequence[inLength-1, :].tolist() == finalState[0].tolist())
 
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+            with tf.variable_scope("singleLayer"):
+                net, gru = getNetwork(1)
+            doTests()
+
+            with tf.variable_scope("multiLayer"):
+                net, gru = getNetwork(2)
+            doTests()
 
     def test_GRUBasic_stateSave(self):
 
@@ -241,11 +254,12 @@ class TestLayerOutputs(unittest.TestCase):
 
         tf.reset_default_graph()
         with tf.Session() as sess:
+            # Single Layer
             with tf.variable_scope("netSingleLayer"):
                 net, gru = getNetwork(nLayers=1)
             sess.run(tf.global_variables_initializer())
             doTests()
-
+            # Multi-Layer
             with tf.variable_scope("netMultiLayer"):
                 net, gru = getNetwork(nLayers=3)
             sess.run(tf.global_variables_initializer())

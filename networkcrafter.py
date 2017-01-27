@@ -365,20 +365,20 @@ class BasicGRU(Layer):
         # Create outputs and state graph
         outputs, self.state = tf.nn.rnn(self.cell, self.sequence, \
             initial_state=self.h, sequence_length=self.sequenceLengths, dtype=tf.float32)
-        outputs = tf.concat(1, outputs)
-        self.rnnOutputs = outputs
+        self.outSequence = tf.concat(1, outputs)
+
 
         if self.saveState:
             # Control depency forces the hidden state to persist
             if (self.nLayers > 1):
                 with tf.control_dependencies(
                     [self.h[i].assign(self.state[i]) for i in range(self.nLayers)]):
-                    activations = self._getActivations(outputs)
+                    activations = self._getActivations(self.outSequence)
             else:
                 with tf.control_dependencies([self.h.assign(self.state)]):
-                    activations = self._getActivations(outputs)
+                    activations = self._getActivations(self.outSequence)
         else:
-            activations = self._getActivations(outputs)
+            activations = self._getActivations(self.outSequence)
 
         Layer.buildGraph(self, activations)
 
@@ -389,10 +389,12 @@ class BasicGRU(Layer):
         else:
             self.h.assign(zeroState).eval(session=sess)
 
-
     def _getActivations(self, outputs):
         if self.activationsAreFinalState:
-            return tf.identity(self.state)
+            if self.nLayers > 1:
+                return tf.identity(self.state[-1])
+            else:
+                return tf.identity(self.state)
         else:
             # Stack the time and batch dimensions
             return tf.reshape(outputs, [-1, self.nNodes])
