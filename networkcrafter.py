@@ -50,6 +50,7 @@ class InputLayer(Layer):
     def buildGraph(self):
         pass
 
+
 class FullConnectLayer(Layer):
 
     def __init__(self, inLayer, nNodes, activationFunction, dropout=False, addBias=True,
@@ -477,10 +478,7 @@ class Seq2SeqDynamic(Layer):
 class Network:
 
     def inputLayer(self, nFeatures, applyOneHot=False, dtype=tf.float32, inputTensor=None):
-        self.inLayer = InputLayer(nFeatures, applyOneHot, dtype, inputTensor)
-        self.layers = [self.inLayer]
-        self.hiddens = []
-        self.outLayer = self.inLayer
+        self.__addLayer__(InputLayer(nFeatures, applyOneHot, dtype, inputTensor))
 
     def defineDecodeInLayer(self, nFeatures, applyOneHot=False, dtype=tf.float32):
         self.decodeInLayer = InputLayer(nFeatures, applyOneHot, dtype)
@@ -545,13 +543,17 @@ class Network:
         self.__addLayer__(Seq2SeqDynamic(self.outLayer, self.decodeInLayer, nNodes, batchSize))
 
     def __addLayer__(self, layer):
+        if (len(self.layers) == 0):
+            self.inLayer = layer
+        else:
+            self.hiddens.append(layer)
         self.layers.append(layer)
-        self.hiddens.append(layer)
         self.outLayer = layer
 
     def __init__(self):
         self.decodeInLayer = None
-        self.hiddens =[]
+        self.hiddens = []
+        self.layers = []
 
     def buildGraph(self):
         for layer in self.layers:
