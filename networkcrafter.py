@@ -564,14 +564,11 @@ class Network:
     def __addLayer__(self, layer):
         if (len(self.layers) == 0):
             self.inLayer = layer
-        else:
-            self.hiddens.append(layer)
         self.layers.append(layer)
         self.outLayer = layer
 
     def __init__(self):
         self.decodeInLayer = None
-        self.hiddens = []
         self.layers = []
 
     def buildGraph(self):
@@ -620,10 +617,9 @@ class Network:
         # Define the feed_dict for a forward pass
         if inputs is not None:
             feedDict[self.inLayer.inputs] = inputs
-        # For each layer with dropout, add its keepProb to feed_dict
-        possibleDropoutLayers = [self.inLayer]
-        possibleDropoutLayers.extend(self.hiddens)
-        for layer in possibleDropoutLayers:
+
+        # Add keepProb to layers with dropout. Add sequence info to recurrent layers.
+        for layer in self.layers:
             if layer.applyDropout:
                 feedDict[layer.keepProb] = keepProb
             if isinstance(layer, Seq2SeqBasic):
