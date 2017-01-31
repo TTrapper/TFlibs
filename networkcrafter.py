@@ -51,6 +51,21 @@ class InputLayer(Layer):
         pass
 
 
+class EmbeddingLayer(Layer):
+
+    def __init__(self, numEmbeddings, embeddingDim):
+
+        Layer.__init__(self, shape=[numEmbeddings, embeddingDim])
+
+        self.embeddings = tf.get_variable("embeddings", self.shape)
+        self.idPlaceholder = tf.placeholder(dtype=tf.int32, shape=[None], name="idPlaceholder")
+        self.inputs = self.idPlaceholder
+
+    def buildGraph(self):
+        activations = tf.nn.embedding_lookup(self.embeddings, self.idPlaceholder)
+        Layer.buildGraph(self, activations)
+
+
 class FullConnectLayer(Layer):
 
     def __init__(self, inLayer, nNodes, activationFunction, dropout=False, addBias=True,
@@ -479,6 +494,10 @@ class Network:
 
     def inputLayer(self, nFeatures, applyOneHot=False, dtype=tf.float32, inputTensor=None):
         self.__addLayer__(InputLayer(nFeatures, applyOneHot, dtype, inputTensor))
+
+    def embeddingLayer(self, numEmbeddings, embeddingDim):
+        with tf.variable_scope("embedding_" + str(len(self.layers))):
+            self.__addLayer__(EmbeddingLayer(numEmbeddings, embeddingDim))
 
     def defineDecodeInLayer(self, nFeatures, applyOneHot=False, dtype=tf.float32):
         self.decodeInLayer = InputLayer(nFeatures, applyOneHot, dtype)

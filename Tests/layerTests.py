@@ -151,6 +151,27 @@ class TestLayerOutputs(unittest.TestCase):
             outputs = sess.run(net.outputs)
             self.assertTrue(expectedOut.tolist() == outputs.tolist())
 
+    def test_embeddingLayer(self):
+
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+            numEmbeddings = 100
+            embedDim = 12
+
+            net = nc.Network()
+            net.embeddingLayer(numEmbeddings, embedDim)
+            net.buildGraph()
+            embedLayer = net.inLayer
+
+            sess.run(tf.global_variables_initializer())
+
+            # Some random embedding indices to ask for.
+            ids = np.random.randint(0, numEmbeddings, 33)
+            expectedOut = sess.run(embedLayer.embeddings)[ids, :]
+            out = net.forward(sess, ids)
+            self.assertTrue(expectedOut.tolist() == out.tolist())
+
+
     def test_fullConnectLayer(self):
 
         # Basic Full Connect
