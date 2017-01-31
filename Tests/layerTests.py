@@ -79,6 +79,78 @@ class TestLayerGraphBuild(unittest.TestCase):
 
 class TestLayerOutputs(unittest.TestCase):
 
+    def test_inputLayer_basic(self):
+
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+            nIn = 9
+
+            net = nc.Network()
+            net.inputLayer(nIn)
+            net.buildGraph()
+            inLayer = net.layers[0]
+
+            inputs = np.array([[1,2,3,4,5,6,7,8,9]]*13)
+            outputs = sess.run(net.outputs, feed_dict={inLayer.inputs:inputs})
+
+            self.assertTrue(inputs.tolist() == outputs.tolist())
+
+    def test_inputLayer_oneHot(self):
+
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+            nIn = 7
+
+            net = nc.Network()
+            net.inputLayer(nIn, applyOneHot=True)
+            net.buildGraph()
+            inLayer = net.layers[0]
+
+            # -1, and 7 are "out of bounds" for one-hot with 7 classes. Should get zero-vectors.
+            inputs = np.array([-1, 0, 1, 2, 3, 4, 5, 6, 7])
+            zeros = np.zeros([1,7])
+            expectedOut = np.concatenate([zeros, np.eye(7), zeros], axis=0)
+
+            outputs = sess.run(net.outputs, feed_dict={inLayer.inputs:inputs})
+            self.assertTrue(outputs.tolist() == expectedOut.tolist())
+
+    def test_inputLayer_tensorIn(self):
+
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+            nIn = 5
+
+            inputs = np.array([[1,2,3,4,5]]*22)
+
+            net = nc.Network()
+            net.inputLayer(nIn, inputTensor=tf.identity(inputs))
+            net.buildGraph()
+            inLayer = net.layers[0]
+
+            outputs = sess.run(net.outputs)
+
+            self.assertTrue(inputs.tolist() == outputs.tolist())
+
+    def test_inputLayer_tensorIn_oneHot(self):
+
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+            nIn = 3
+
+            inputs = np.array([-1, 0, 1, 2, 3])
+
+            net = nc.Network()
+            net.inputLayer(nIn, applyOneHot=True, inputTensor=tf.identity(inputs))
+            net.buildGraph()
+            inLayer = net.layers[0]
+
+            # -1 and 3 are "out of bounds" for one-hot with 3 classes. Should get zero-vectors.
+            zeros = np.zeros([1,3])
+            expectedOut = np.concatenate([zeros, np.eye(3), zeros], axis=0)
+
+            outputs = sess.run(net.outputs)
+            self.assertTrue(expectedOut.tolist() == outputs.tolist())
+
     def test_fullConnectLayer(self):
 
         # Basic Full Connect
