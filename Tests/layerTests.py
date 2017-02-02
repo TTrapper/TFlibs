@@ -266,8 +266,8 @@ class TestLayerOutputs(unittest.TestCase):
         inputs = [1]*maxInLen
         inLength = 5
 
-        def getNetwork(nLayers):
-            net = nc.Network()
+        def getNetwork(nLayers, scopeName):
+            net = nc.Network(scopeName)
             net.inputLayer(nIn, applyOneHot=True)
             net.basicGRU(nNodes, nLayers=nLayers,  maxSeqLen=maxInLen, saveState=False, activationsAreFinalState=True)
             net.buildGraph()
@@ -288,12 +288,11 @@ class TestLayerOutputs(unittest.TestCase):
 
         tf.reset_default_graph()
         with tf.Session() as sess:
-            with tf.variable_scope("singleLayer"):
-                net, gru = getNetwork(1)
+
+            net, gru = getNetwork(1, "singleLayer")
             doTests()
 
-            with tf.variable_scope("multiLayer"):
-                net, gru = getNetwork(2)
+            net, gru = getNetwork(2, "multiLayer")
             doTests()
 
     def test_GRUBasic_stateSave(self):
@@ -305,13 +304,14 @@ class TestLayerOutputs(unittest.TestCase):
         halfSequenceLengths = [maxInLen/2]*batchSize
         fullSequenceLengths = [maxInLen]*batchSize
 
-        def getNetwork(nLayers):
-            net = nc.Network()
+        def getNetwork(nLayers, scopeName):
+            net = nc.Network(scopeName)
             net.inputLayer(nIn)
             net.basicGRU(nNodes, nLayers=nLayers, maxSeqLen=maxInLen, batchSize=batchSize, saveState=True)
             net.buildGraph()
             gru = net.outLayer
 
+            sess.run(tf.global_variables_initializer())
             return net, gru
 
         def doTests():
@@ -348,14 +348,10 @@ class TestLayerOutputs(unittest.TestCase):
         tf.reset_default_graph()
         with tf.Session() as sess:
             # Single Layer
-            with tf.variable_scope("netSingleLayer"):
-                net, gru = getNetwork(nLayers=1)
-            sess.run(tf.global_variables_initializer())
+            net, gru = getNetwork(nLayers=1, scopeName="singleLayer")
             doTests()
             # Multi-Layer
-            with tf.variable_scope("netMultiLayer"):
-                net, gru = getNetwork(nLayers=3)
-            sess.run(tf.global_variables_initializer())
+            net, gru = getNetwork(nLayers=3, scopeName="multiLayer")
             doTests()
 
     def test_seq2SeqBasic_feedPrev(self):
@@ -441,6 +437,42 @@ class TestLayerOutputs(unittest.TestCase):
             self.assertEquals(out.tolist(), expectedResult.tolist())
 
 
+class TestNetwork(unittest.TestCase):
+
+    def test_variableScope(self):
+
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+            net = nc.Network("Jacob")
+            net.inputLayer(2)
+            net.fullConnectLayer(5, None)
+            net.basicGRU(4, nLayers=3, maxSeqLen=10, batchSize=2)
+            net.fullConnectLayer(20, tf.nn.softmax)
+            sess.run(tf.global_variables_initializer())
+
+            self.assertEquals(net.scope.name, "Jacob")
+
+            # Variables exist at expected scope
+            with tf.variable_scope(net.scope.name + "/layer1_FullConnectLayer", reuse=True):
+                fc1Weights = tf.get_variable("weights")
+            with tf.variable_scope(net.scope.name + "/layer3_FullConnectLayer", reuse=True):
+                fc2Weights = tf.get_variable("weights")
+
+            # The weights retrieved via namescope are the same as those in the layers
+            fc1 = net.layers[1]
+            fc2 = net.outLayer
+            self.assertEquals(fc1.weights.eval().tolist(), fc1Weights.eval().tolist())
+            self.assertEquals(fc2.weights.eval().tolist(), fc2Weights.eval().tolist())
+
+            # We can create a second network with the same variables, different batch size.
+            net2 = nc.Network("Jacob", reuseVariables=True)
+            net2.inputLayer(2)
+            net2.fullConnectLayer(5, None)
+            net2.basicGRU(4, nLayers=3, maxSeqLen=10, batchSize=1)
+            net2.fullConnectLayer(20, tf.nn.softmax)
+            sess.run(tf.global_variables_initializer())
+
+            self.assertEquals(net2.outLayer.biases, net.outLayer.biases)
 
 if __name__ == '__main__':
     unittest.main()
