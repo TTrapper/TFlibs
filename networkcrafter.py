@@ -493,11 +493,10 @@ class Seq2SeqDynamic(Layer):
 class Network:
 
     def inputLayer(self, nFeatures, applyOneHot=False, dtype=tf.float32, inputTensor=None):
-        self.__addLayer__(InputLayer(nFeatures, applyOneHot, dtype, inputTensor))
+        self.__addLayerWithScope__(InputLayer, nFeatures, applyOneHot, dtype, inputTensor)
 
     def embeddingLayer(self, numEmbeddings, embeddingDim):
-        with tf.variable_scope("embedding_" + str(len(self.layers))):
-            self.__addLayer__(EmbeddingLayer(numEmbeddings, embeddingDim))
+        self.__addLayerWithScope__(EmbeddingLayer, numEmbeddings, embeddingDim)
 
     def defineDecodeInLayer(self, nFeatures, applyOneHot=False, dtype=tf.float32):
         self.decodeInLayer = InputLayer(nFeatures, applyOneHot, dtype)
@@ -508,58 +507,66 @@ class Network:
 
     def fullConnectLayer(self,  nNodes, activationFunction, dropout=False, addBias=True,
         initType='xavier', wTranspose=False):
-
-        with tf.variable_scope("fullConnect_" + str(len(self.layers))) as scope:
-            self.__addLayer__(FullConnectLayer(self.outLayer, nNodes, activationFunction,
-                dropout, addBias, initType, wTranspose))
+        self.__addLayerWithScope__(FullConnectLayer,  self.outLayer, nNodes, activationFunction,
+                dropout, addBias, initType, wTranspose)
 
     def concatLayer(self, concatTensor, concatTensorLen, dropout=False):
-        self.__addLayer__(ConcatLayer(self.outLayer, concatTensor, concatTensorLen, dropout))
+        self.__addLayerWithScope__(
+            ConcatLayer, self.outLayer, concatTensor, concatTensorLen, dropout)
 
     def additionLayer(self, addTensor, dropout=False):
-        self.__addLayer__(AdditionLayer(self.outLayer, addTensor, dropout))
+        self.__addLayerWithScope__(AdditionLayer, self.outLayer, addTensor, dropout)
 
     def convLayer(self, activationFunction, filterSize, strides=[1,1,1,1], dropout=False):
-        self.__addLayer__(ConvLayer(self.outLayer, activationFunction, filterSize, strides, dropout))
+        self.__addLayerWithScope__(
+            ConvLayer, self.outLayer, activationFunction, filterSize, strides, dropout)
 
     def poolLayer(self,  poolSize, strides=None, dropout=False, poolType=tf.nn.max_pool):
         if strides is None:
             strides = poolSize
-        self.__addLayer__(PoolLayer(self.outLayer, poolSize, strides, dropout, poolType))
+        self.__addLayerWithScope__(PoolLayer, self.outLayer, poolSize, strides, dropout, poolType)
 
     def reshapeLayer(self, newShape, dropout=False):
-        self.__addLayer__(ReshapeLayer(self.outLayer, newShape, dropout))
+        self.__addLayerWithScope__(ReshapeLayer, self.outLayer, newShape, dropout)
 
     def rnnLayer(self, nNodes, dropout=False):
-        self.__addLayer__(RNN(self.outLayer, nNodes, dropout))
+        self.__addLayerWithScope__(RNN, self.outLayer, nNodes, dropout)
 
     def gruLayer(self, nNodes, dropout=False):
-        self.__addLayer__(GRU(self.outLayer, nNodes, dropout))
+        self.__addLayerWithScope__(GRU, self.outLayer, nNodes, dropout)
 
     def basicGRU(self, nNodes, nLayers=1, maxSeqLen=10, batchSize=1, dropout=False, initialState=None,
         saveState=True, activationsAreFinalState=False):
 
-        self.__addLayer__(BasicGRU(self.outLayer, nNodes, nLayers, maxSeqLen, batchSize=batchSize,
+        self.__addLayerWithScope__(
+            BasicGRU, self.outLayer, nNodes, nLayers, maxSeqLen, batchSize=batchSize,
             dropout=dropout, initialState=initialState, saveState=saveState,
-            activationsAreFinalState=activationsAreFinalState))
+            activationsAreFinalState=activationsAreFinalState)
 
     def dynamicGRU(self, nNodes, nLayers=1, batchSize=1, dropout=False, initialState=None,
         saveState=True, activationsAreFinalState=False):
 
-        self.__addLayer__(DynamicGRU(
+        self.__addLayerWithScope__(DynamicGRU,
             self.outLayer, nNodes, nLayers, batchSize, dropout=dropout, initialState=initialState,
-            saveState=saveState, activationsAreFinalState=activationsAreFinalState))
+            saveState=saveState, activationsAreFinalState=activationsAreFinalState)
 
     def seq2SeqBasic(self, nNodes, enSeqLen, deSeqLen, wb, feedPrev=False):
         if self.decodeInLayer is None:
             raise StandardError("Must define a decodeInLayer for the Seq2Seq model.")
-        self.__addLayer__(Seq2SeqBasic(self.outLayer, self.decodeInLayer, nNodes,\
-            enSeqLen, deSeqLen, wb, feedPrev))
+        self.__addLayerWithScope__(Seq2SeqBasic, self.outLayer, self.decodeInLayer, nNodes,\
+            enSeqLen, deSeqLen, wb, feedPrev)
 
     def seq2SeqDynamic(self, nNodes, batchSize):
         if self.decodeInLayer is None:
             raise StandardError("Must define a decodeInLayer for the Seq2Seq model.")
-        self.__addLayer__(Seq2SeqDynamic(self.outLayer, self.decodeInLayer, nNodes, batchSize))
+        self.__addLayerWithScope__(
+            Seq2SeqDynamic, self.outLayer, self.decodeInLayer, nNodes, batchSize)
+
+    def __addLayerWithScope__(self, layerClass, *args, **kwargs):
+        with tf.variable_scope(self.scope):
+           layerScopeName = "layer" + str(len(self.layers)) + "_" + layerClass.__name__
+           with tf.variable_scope(layerScopeName) as scope:
+               self.__addLayer__(layerClass(*args, **kwargs))
 
     def __addLayer__(self, layer):
         if (len(self.layers) == 0):
@@ -567,7 +574,10 @@ class Network:
         self.layers.append(layer)
         self.outLayer = layer
 
-    def __init__(self):
+    def __init__(self, scopeName="net", reuseVariables=False, initializer=None):
+
+        with tf.variable_scope(scopeName, reuse=reuseVariables, initializer=initializer) as scope:
+            self.scope=scope
         self.decodeInLayer = None
         self.layers = []
 
