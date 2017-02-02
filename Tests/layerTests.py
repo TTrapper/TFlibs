@@ -151,6 +151,7 @@ class TestLayerOutputs(unittest.TestCase):
             outputs = sess.run(net.outputs)
             self.assertTrue(expectedOut.tolist() == outputs.tolist())
 
+
     def test_embeddingLayer(self):
 
         tf.reset_default_graph()
@@ -171,6 +172,34 @@ class TestLayerOutputs(unittest.TestCase):
             out = net.forward(sess, ids)
             self.assertTrue(expectedOut.tolist() == out.tolist())
 
+    def test_embeddingLayer_tensorIn(self):
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+            numEmbeddings = 45
+            embedDim = 12
+
+            lookupTensor = tf.constant(np.random.randint(0, numEmbeddings, 22))
+
+            netPlaceholder = nc.Network()
+            netPlaceholder.embeddingLayer(numEmbeddings, embedDim)
+            netPlaceholder.buildGraph()
+
+            netExternalLookup = nc.Network(reuseVariables=True)
+            netExternalLookup.embeddingLayer(numEmbeddings, embedDim, lookupTensor)
+            netExternalLookup.buildGraph()
+            embedLayer = netExternalLookup.outLayer
+
+            sess.run(tf.global_variables_initializer())
+
+            # Manually apply the lookup tensor and check that we get the same from the network
+            expectedOut = sess.run(embedLayer.embeddings)[lookupTensor.eval()]
+            out = netExternalLookup.forward(sess, None)
+            self.assertTrue(expectedOut.tolist() == out.tolist())
+
+            # Check that the two networks yield the same result.
+            outFromPlaceholder = netPlaceholder.forward(sess, lookupTensor.eval())
+            outFromExternal = netExternalLookup.forward(sess, None)
+            self.assertEqual(outFromPlaceholder.tolist(), outFromExternal.tolist())
 
     def test_fullConnectLayer(self):
 

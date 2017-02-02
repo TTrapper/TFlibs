@@ -53,16 +53,18 @@ class InputLayer(Layer):
 
 class EmbeddingLayer(Layer):
 
-    def __init__(self, numEmbeddings, embeddingDim):
+    def __init__(self, numEmbeddings, embeddingDim, lookupTensor=None):
 
         Layer.__init__(self, shape=[numEmbeddings, embeddingDim])
 
         self.embeddings = tf.get_variable("embeddings", self.shape)
-        self.idPlaceholder = tf.placeholder(dtype=tf.int32, shape=[None], name="idPlaceholder")
-        self.inputs = self.idPlaceholder
+        if lookupTensor is not None:
+            self.inputs = lookupTensor
+        else:
+            self.inputs = tf.placeholder(dtype=tf.int32, shape=[None], name="idPlaceholder")
 
     def buildGraph(self):
-        activations = tf.nn.embedding_lookup(self.embeddings, self.idPlaceholder)
+        activations = tf.nn.embedding_lookup(self.embeddings, self.inputs)
         Layer.buildGraph(self, activations)
 
 
@@ -479,8 +481,8 @@ class Network:
     def inputLayer(self, nFeatures, applyOneHot=False, dtype=tf.float32, inputTensor=None):
         self.__addLayerWithScope__(InputLayer, nFeatures, applyOneHot, dtype, inputTensor)
 
-    def embeddingLayer(self, numEmbeddings, embeddingDim):
-        self.__addLayerWithScope__(EmbeddingLayer, numEmbeddings, embeddingDim)
+    def embeddingLayer(self, numEmbeddings, embeddingDim, lookupTensor=None):
+        self.__addLayerWithScope__(EmbeddingLayer, numEmbeddings, embeddingDim, lookupTensor)
 
     def defineDecodeInLayer(self, nFeatures, applyOneHot=False, dtype=tf.float32):
         self.decodeInLayer = InputLayer(nFeatures, applyOneHot, dtype)
