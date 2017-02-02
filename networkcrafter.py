@@ -69,7 +69,7 @@ class EmbeddingLayer(Layer):
 class FullConnectLayer(Layer):
 
     def __init__(self, inLayer, nNodes, activationFunction, dropout=False, addBias=True,
-        initType='xavier', wTranspose=False):
+        wTranspose=False):
 
         self.inLayer = inLayer
         self.nNodes = nNodes
@@ -77,32 +77,16 @@ class FullConnectLayer(Layer):
         self.wTranspose = wTranspose
         shape = [inLayer.shape[-1], nNodes] if not self.wTranspose else [nNodes, inLayer.shape[-1]]
 
-        self.weights, self.biases = self.initWeights(shape, initType)
+        self.weights, self.biases = self.initWeights(shape)
 
         Layer.__init__(self, shape, activationFunction, dropout=dropout)
 
-    def initWeights(self, shape, initType):
-
-        initializer = self.getInitializer(shape, initType)
-        weights = tf.get_variable("weights", shape, initializer=initializer)
+    def initWeights(self, shape):
+        weights = tf.get_variable("weights", shape)
         biases = False
         if self.addBias:
-            biases = tf.get_variable("biases", [self.nNodes], initializer=initializer)
-
+            biases = tf.get_variable("biases", [self.nNodes])
         return [weights, biases]
-
-    def getInitializer(self, shape, initType):
-
-        if initType == 'xavier':
-            xavierStddev = np.sqrt(3.0/(shape[0]+shape[1]))
-            initializer = tf.random_normal_initializer(0, xavierStddev)
-        elif initType == 'uniform':
-            uniformRange = (0.5/self.nNodes)
-            initializer = tf.random_uniform_initializer(-uniformRange, uniformRange)
-        else:
-            raise ValueError("initType (" + initType + ") not in list of allowed values.")
-
-        return initializer
 
     def buildGraph(self):
         weightedInput = tf.matmul(
@@ -506,9 +490,9 @@ class Network:
         self.targetVals = self.targets.activations
 
     def fullConnectLayer(self,  nNodes, activationFunction, dropout=False, addBias=True,
-        initType='xavier', wTranspose=False):
-        self.__addLayerWithScope__(FullConnectLayer,  self.outLayer, nNodes, activationFunction,
-                dropout, addBias, initType, wTranspose)
+        wTranspose=False):
+        self.__addLayerWithScope__(FullConnectLayer, self.outLayer, nNodes, activationFunction,
+                dropout, addBias, wTranspose)
 
     def concatLayer(self, concatTensor, concatTensorLen, dropout=False):
         self.__addLayerWithScope__(
@@ -563,6 +547,7 @@ class Network:
             Seq2SeqDynamic, self.outLayer, self.decodeInLayer, nNodes, batchSize)
 
     def __addLayerWithScope__(self, layerClass, *args, **kwargs):
+
         with tf.variable_scope(self.scope):
            layerScopeName = "layer" + str(len(self.layers)) + "_" + layerClass.__name__
            with tf.variable_scope(layerScopeName) as scope:
@@ -574,7 +559,8 @@ class Network:
         self.layers.append(layer)
         self.outLayer = layer
 
-    def __init__(self, scopeName="net", reuseVariables=False, initializer=None):
+    def __init__(self, scopeName="net", reuseVariables=False,
+        initializer=tf.contrib.layers.xavier_initializer()):
 
         with tf.variable_scope(scopeName, reuse=reuseVariables, initializer=initializer) as scope:
             self.scope=scope
