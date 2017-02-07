@@ -201,6 +201,35 @@ class TestLayerOutputs(unittest.TestCase):
             outFromExternal = netExternalLookup.forward(sess, None)
             self.assertEqual(outFromPlaceholder.tolist(), outFromExternal.tolist())
 
+
+    def test_reduceOp(self):
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+            nIn = 5
+            nExamples = 12
+
+            inputs = np.random.rand(nIn, nExamples)
+
+            meanNet = nc.Network("mean")
+            meanNet.inputLayer(nIn, inputTensor=tf.constant(inputs))
+            meanNet.reduceOpLayer(axis=1)
+            meanNet.buildGraph()
+
+            out = meanNet.outputs.eval()
+            expectedOut = tf.reduce_mean(inputs, axis=1).eval()
+            self.assertEquals(out.tolist(), expectedOut.tolist())
+            self.assertEquals(out.shape[-1], nIn)
+
+            sumNet = nc.Network("sum")
+            sumNet.inputLayer(nIn, inputTensor=tf.constant(inputs))
+            sumNet.reduceOpLayer(reduceOp=tf.reduce_sum)
+            sumNet.buildGraph()
+
+            out = sumNet.outputs.eval()
+            expectedOut = tf.reduce_sum(inputs, axis=0).eval()
+            self.assertEquals(out.tolist(), expectedOut.tolist())
+            self.assertEquals(out.shape[-1], nExamples)
+
     def test_fullConnectLayer(self):
 
         # Basic Full Connect

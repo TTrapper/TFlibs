@@ -120,6 +120,19 @@ class AdditionLayer(Layer):
         activations = tf.add(self.inLayer.activations, self.addTensor)
         Layer.buildGraph(self, activations)
 
+class ReduceOpLayer(Layer):
+
+    def __init__(self, inLayer, axis=0, reduceOp=tf.reduce_mean, dropout=False):
+        self.inLayer = inLayer
+        self.reduceOp = reduceOp
+        self.axis = axis
+
+        Layer.__init__(self, [inLayer.shape[-1]], dropout=dropout)
+
+    def buildGraph(self):
+        activations = self.reduceOp(self.inLayer.activations, axis=self.axis)
+        Layer.buildGraph(self, activations)
+
 class ConvLayer(Layer):
 
     def __init__(self, inLayer, activationFunction, filterSize, strides=[1,1,1,1], dropout=False):
@@ -502,6 +515,9 @@ class Network:
 
     def additionLayer(self, addTensor, dropout=False):
         self.__addLayerWithScope__(AdditionLayer, self.outLayer, addTensor, dropout)
+
+    def reduceOpLayer(self, axis=0, reduceOp=tf.reduce_mean, dropout=False):
+        self.__addLayerWithScope__(ReduceOpLayer, self.outLayer, axis, reduceOp, dropout)
 
     def convLayer(self, activationFunction, filterSize, strides=[1,1,1,1], dropout=False):
         self.__addLayerWithScope__(
