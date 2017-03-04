@@ -315,6 +315,33 @@ class TestLayerOutputs(unittest.TestCase):
 
             self.assertTrue(maxDiff >= difference)
 
+    def test_GRUBasic_seqLenTensor(self):
+        nNodes = 7
+        maxSeqLen = 10
+        batchSize = 3
+
+        def getNetwork(sequenceLengths, reuse):
+            net = nc.Network(reuseVariables=reuse)
+            net.inputLayer(nNodes)
+            net.basicGRU(nNodes=nNodes, batchSize=batchSize, maxSeqLen=maxSeqLen,
+                sequenceLengths=sequenceLengths)
+            net.buildGraph()
+            return net
+
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+            seqLens = [2, 10, 4]
+            netSeqLenIn = getNetwork(seqLens, False)
+
+            netSeqLenPlace = getNetwork(None, True)
+
+            sess.run(tf.global_variables_initializer())
+
+            ins = np.random.rand(batchSize*maxSeqLen, nNodes)
+            outSeqLenIn = netSeqLenIn.forward(sess, ins)
+            outSeqLenPlace = netSeqLenPlace.forward(sess, ins, sequenceLengths=seqLens)
+            # Same result when seq lens are given as placeholder or defined on layer init
+            self.assertEquals(outSeqLenIn.tolist(), outSeqLenPlace.tolist())
 
     def test_GRUBasic_stateOut(self):
 

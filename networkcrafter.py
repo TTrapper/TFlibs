@@ -172,7 +172,7 @@ class ReshapeLayer(Layer):
         Layer.__init__(self, newShape, dropout=dropout)
 
     def buildGraph(self):
-        activations = tf.reshape(self.inLayer.activations, self.shape)
+        activations = tf.reshape(self.inLayer.activations, self.shape, name="reshapeLayer")
         Layer.buildGraph(self, activations)
 
 class RNN(Layer):
@@ -277,71 +277,10 @@ class GRU(Layer):
     def resetHiddenLayer(self, sess):
         self.h.assign(tf.zeros([1, self.shape[0]])).eval(session=sess)
 
-
 class DynamicGRU(Layer):
 
-    def __init__(self, inLayer, nNodes, nLayers=1, batchSize=1, dropout=False, initialState=None,
-        saveState=True, activationsAreFinalState=False):
-
-        self.inLayer = inLayer
-        self.nNodes = nNodes
-        self.nLayers = nLayers
-        self.batchSize = batchSize
-        self.saveState = saveState
-        self.activationsAreFinalState = activationsAreFinalState
-        self.sequenceLengths = tf.placeholder(dtype=tf.int32, shape=[batchSize], name="DyGRUSeqLen")
-
-        # TensorFlow's build in GRU cell
-        self.cell = tf.nn.rnn_cell.GRUCell(nNodes)
-        # Can stack multiple layers
-        assert nLayers > 0
-        if nLayers > 1:
-            self.cell = tf.nn.rnn_cell.MultiRNNCell([self.cell]*nLayers)
-
-        if initialState is None:
-            if nLayers > 1:
-                self.h = tf.Variable([[0]*nNodes]*nLayers)
-            else:
-                self.h = tf.Variable([0]*nNodes)
-        else:
-            self.h = tf.Variable(initialState)
-
-        Layer.__init__(self, [nNodes, nNodes*nLayers], dropout=dropout)
-
-    def buildGraph(self):
-        # Assumption that data has rank-2 on the way in, reshape to get a batch of sequences
-        self.sequence = \
-            tf.reshape(self.inLayer.activations, [self.batchSize, -1, self.inLayer.shape[-1]])
-
-        # Create outputs and state graph
-        outputs, self.state = tf.nn.dynamic_rnn(self.cell, self.sequence, \
-            initial_state=self.h, sequence_length=self.sequenceLengths, dtype=tf.float32)
-        self.outputs = outputs
-
-        if self.saveState:
-            # Control depency forces the hidden state to persist
-            with tf.control_dependencies([self.h.assign(self.state)]):
-                if self.activationsAreFinalState:
-                    activations = self.state
-                else:
-                    # Squeeze the batches back together
-                    activations = tf.reshape(outputs, [-1, self.nNodes])
-        else:
-            if self.activationsAreFinalState:
-                activations = self.state
-            else:
-                activations = tf.reshape(outputs, [-1, self.nNodes])
-
-        Layer.buildGraph(self, activations)
-
-    def resetHiddenLayer(self, sess):
-        self.h.assign(tf.zeros([self.batchSize, self.shape[0]*self.nLayers])).eval(session=sess)
-
-
-class BasicGRU(Layer):
-
-    def __init__(self, inLayer, nNodes, nLayers, maxSeqLen, batchSize=1, dropout=False, initialState=None,
-        saveState=True, activationsAreFinalState=False):
+    def __init__(self, inLayer, nNodes, nLayers, maxSeqLen, sequenceLengths=None, batchSize=1,
+        dropout=False, initialState=None, saveState=True, activationsAreFinalState=False):
 
         self.inLayer = inLayer
         self.nNodes = nNodes
@@ -350,7 +289,89 @@ class BasicGRU(Layer):
         self.batchSize = batchSize
         self.saveState = saveState
         self.activationsAreFinalState = activationsAreFinalState
-        self.sequenceLengths = tf.placeholder(dtype=tf.int32, name="BasicGRUSeqLen")
+        if sequenceLengths is None:
+            self.sequenceLengths = tf.placeholder(dtype=tf.int32, name="BasicGRUSeqLen")
+        else:
+            self.sequenceLengths = sequenceLengths
+
+        # Tensorflow's built in GRU cell
+        self.cell = tf.nn.rnn_cell.GRUCell(nNodes)
+        assert nLayers > 0
+        if nLayers > 1:
+            self.cell = tf.nn.rnn_cell.MultiRNNCell([self.cell]*nLayers)
+
+        if initialState is None:
+            self.h = self.cell.zero_state(batchSize, tf.float32)
+            if nLayers > 1:
+                self.h = tuple([tf.Variable(state, trainable=False) for state in self.h])
+            else:
+                self.h = tf.Variable(self.h, trainable=False)
+        else:
+            if saveState is True:
+                raise ValueError("saveState is not supported with external initialState.")
+            self.h = initialState
+
+        Layer.__init__(self, [nNodes, nNodes], dropout=dropout)
+
+    def buildGraph(self):
+        # Assumption that data has rank-2 on the way in, reshape to get a batch of sequences
+        self.sequence = \
+            tf.reshape(self.inLayer.activations, [self.batchSize, -1, self.inLayer.shape[-1]])
+        
+        # Create outputs and state graph
+        outputs, self.state = tf.nn.dynamic_rnn(self.cell, self.sequence, initial_state=self.h,\
+            sequence_length=self.sequenceLengths, swap_memory=True)
+        self.outSequence = outputs
+
+        if self.saveState:
+            # Control depency forces the hidden state to persist
+            with tf.control_dependencies([self._assignInitialStateOp(self.state)]):
+                activations = self._getActivations(self.outSequence)
+        else:
+            activations = self._getActivations(self.outSequence)
+
+        Layer.buildGraph(self, activations)
+
+    def resetHiddenLayer(self, sess, newState=None):
+        if newState is None:
+            newState = self.cell.zero_state(self.batchSize, tf.float32)
+        sess.run(self._assignInitialStateOp(newState))
+
+    def _assignInitialStateOp(self, newState):
+        if self.nLayers > 1:
+            """ Bit of a hack here, returning a useless identy op.
+                The desired assign op is forced by control_dependencies. """
+            with tf.control_dependencies([self.h[i].assign(state) for i, state in enumerate(newState)]):
+                return tf.identity(1)
+        else:
+            return self.h.assign(newState)
+
+    def _getActivations(self, outputs):
+        if self.activationsAreFinalState:
+            if self.nLayers > 1:
+                return tf.identity(self.state[-1])
+            else:
+                return tf.identity(self.state)
+        else:
+            # Stack the time and batch dimensions
+            return tf.reshape(outputs, [-1, self.nNodes])
+
+class BasicGRU(Layer):
+
+    def __init__(self, inLayer, nNodes, nLayers, maxSeqLen, sequenceLengths=None, batchSize=1,
+        dropout=False, initialState=None, saveState=True, activationsAreFinalState=False):
+
+        self.inLayer = inLayer
+        self.nNodes = nNodes
+        self.nLayers = nLayers
+        self.maxSeqLen = maxSeqLen
+        self.batchSize = batchSize
+        self.saveState = saveState
+        self.activationsAreFinalState = activationsAreFinalState
+        if sequenceLengths is None:
+            self.sequenceLengths = tf.placeholder(dtype=tf.int32, name="BasicGRUSeqLen")
+        else:
+            self.sequenceLengths = sequenceLengths
 
         # Tensorflow's built in GRU cell
         self.cell = tf.nn.rnn_cell.GRUCell(nNodes)
@@ -537,20 +558,21 @@ class Network:
     def gruLayer(self, nNodes, dropout=False):
         self.__addLayerWithScope__(GRU, self.outLayer, nNodes, dropout)
 
-    def basicGRU(self, nNodes, nLayers=1, maxSeqLen=10, batchSize=1, dropout=False, initialState=None,
-        saveState=True, activationsAreFinalState=False):
+    def basicGRU(self, nNodes, nLayers=1, maxSeqLen=10, sequenceLengths=None, batchSize=1, dropout=False,
+        initialState=None, saveState=True, activationsAreFinalState=False):
 
         self.__addLayerWithScope__(
-            BasicGRU, self.outLayer, nNodes, nLayers, maxSeqLen, batchSize=batchSize,
-            dropout=dropout, initialState=initialState, saveState=saveState,
+            BasicGRU, self.outLayer, nNodes, nLayers, maxSeqLen, sequenceLengths=sequenceLengths,
+            batchSize=batchSize, dropout=dropout, initialState=initialState, saveState=saveState,
             activationsAreFinalState=activationsAreFinalState)
 
-    def dynamicGRU(self, nNodes, nLayers=1, batchSize=1, dropout=False, initialState=None,
-        saveState=True, activationsAreFinalState=False):
+    def dynamicGRU(self, nNodes, nLayers=1, maxSeqLen=10, sequenceLengths=None, batchSize=1, dropout=False,
+        initialState=None, saveState=True, activationsAreFinalState=False):
 
-        self.__addLayerWithScope__(DynamicGRU,
-            self.outLayer, nNodes, nLayers, batchSize, dropout=dropout, initialState=initialState,
-            saveState=saveState, activationsAreFinalState=activationsAreFinalState)
+        self.__addLayerWithScope__(
+            DynamicGRU, self.outLayer, nNodes, nLayers, maxSeqLen, sequenceLengths=sequenceLengths,
+            batchSize=batchSize, dropout=dropout, initialState=initialState, saveState=saveState,
+            activationsAreFinalState=activationsAreFinalState)
 
     def seq2SeqBasic(self, nNodes, enSeqLen, deSeqLen, wb, feedPrev=False):
         if self.decodeInLayer is None:
@@ -568,7 +590,7 @@ class Network:
 
         with tf.variable_scope(self.scope):
            layerScopeName = "layer" + str(len(self.layers)) + "_" + layerClass.__name__
-           with tf.variable_scope(layerScopeName) as scope:
+           with tf.variable_scope(layerScopeName):
                self.__addLayer__(layerClass(*args, **kwargs))
 
     def __addLayer__(self, layer):
@@ -579,15 +601,23 @@ class Network:
 
     def __init__(self, scopeName="net", reuseVariables=False,
         initializer=tf.contrib.layers.xavier_initializer()):
-
+        self.scopeName = scopeName
+        self.reuseVariables = reuseVariables
         with tf.variable_scope(scopeName, reuse=reuseVariables, initializer=initializer) as scope:
             self.scope=scope
         self.decodeInLayer = None
         self.layers = []
 
+    def setInitializer(self, initializer):
+        with tf.variable_scope(self.scopeName, reuse=self.reuseVariables, initializer=initializer) as scope:
+            self.scope=scope
+
     def buildGraph(self):
-        for layer in self.layers:
-            layer.buildGraph()
+        for i, layer in enumerate(self.layers):
+            with tf.variable_scope(self.scope):
+                layerScopeName = "layer" + str(i) + "_" + type(layer).__name__
+                with tf.variable_scope(layerScopeName):
+                    layer.buildGraph()
         self.outputs = self.outLayer.activations
 
     def setInputs(self, inputTensor):
@@ -639,7 +669,8 @@ class Network:
             if isinstance(layer, Seq2SeqBasic):
                 feedDict[layer.enSequenceLengths] = sequenceLengths
             if isinstance(layer, DynamicGRU) or isinstance(layer, BasicGRU):
-                feedDict[layer.sequenceLengths] = sequenceLengths
+                if sequenceLengths is not None:
+                    feedDict[layer.sequenceLengths] = sequenceLengths
             if isinstance(layer, Seq2SeqDynamic):
                 feedDict[layer.encodeLayer.sequenceLengths] = sequenceLengths
                 if decoderSequenceLengths is not None:
