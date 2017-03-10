@@ -324,7 +324,7 @@ class TestLayerOutputs(unittest.TestCase):
             net = nc.Network(reuseVariables=reuse)
             net.inputLayer(nNodes)
             net.basicGRU(nNodes=nNodes, batchSize=batchSize, maxSeqLen=maxSeqLen,
-                sequenceLengths=sequenceLengths)
+                sequenceLengths=sequenceLengths, saveState=False)
             net.buildGraph()
             return net
 

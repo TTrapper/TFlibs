@@ -53,11 +53,11 @@ class InputLayer(Layer):
 
 class EmbeddingLayer(Layer):
 
-    def __init__(self, numEmbeddings, embeddingDim, lookupTensor=None):
+    def __init__(self, numEmbeddings, embeddingDim, lookupTensor=None, trainable=True):
 
         Layer.__init__(self, shape=[numEmbeddings, embeddingDim])
 
-        self.embeddings = tf.get_variable("embeddings", self.shape)
+        self.embeddings = tf.get_variable("embeddings", self.shape, trainable=trainable)
         if lookupTensor is not None:
             self.inputs = lookupTensor
         else:
@@ -306,6 +306,7 @@ class DynamicGRU(Layer):
                 self.h = tuple([tf.Variable(state, trainable=False) for state in self.h])
             else:
                 self.h = tf.Variable(self.h, trainable=False)
+
         else:
             if saveState is True:
                 raise ValueError("saveState is not supported with external initialState.")
@@ -317,7 +318,7 @@ class DynamicGRU(Layer):
         # Assumption that data has rank-2 on the way in, reshape to get a batch of sequences
         self.sequence = \
             tf.reshape(self.inLayer.activations, [self.batchSize, -1, self.inLayer.shape[-1]])
-        
+
         # Create outputs and state graph
         outputs, self.state = tf.nn.dynamic_rnn(self.cell, self.sequence, initial_state=self.h,\
             sequence_length=self.sequenceLengths, swap_memory=True)
@@ -375,16 +376,21 @@ class BasicGRU(Layer):
 
         # Tensorflow's built in GRU cell
         self.cell = tf.nn.rnn_cell.GRUCell(nNodes)
+
         assert nLayers > 0
         if nLayers > 1:
             self.cell = tf.nn.rnn_cell.MultiRNNCell([self.cell]*nLayers)
 
         if initialState is None:
-            self.h = self.cell.zero_state(batchSize, tf.float32)
+            self.zeroState = self.cell.zero_state(batchSize, tf.float32)
             if nLayers > 1:
-                self.h = tuple([tf.Variable(state, trainable=False) for state in self.h])
+                self.h = []
+                for i, state in enumerate(self.zeroState):
+                    name = "initialSate_" + str(i)
+                    self.h.append(tf.get_variable(name, initializer=state, trainable=False))
+                self.h = tuple(self.h)
             else:
-                self.h = tf.Variable(self.h, trainable=False)
+                self.h = tf.get_variable("initialState", initializer=self.zeroState, trainable=False)
         else:
             if saveState is True:
                 raise ValueError("saveState is not supported with external initialState.")
@@ -393,6 +399,7 @@ class BasicGRU(Layer):
         Layer.__init__(self, [nNodes, nNodes], dropout=dropout)
 
     def buildGraph(self):
+
         # Assumption that data has rank-2 on the way in, reshape to get a batch of sequences
         self.sequence = \
             tf.reshape(self.inLayer.activations, [-1, self.maxSeqLen, self.inLayer.shape[-1]])
@@ -410,9 +417,13 @@ class BasicGRU(Layer):
         else:
             activations = self._getActivations(self.outSequence)
 
+        # Add an op to graph for resetting the initial state to zero
+        self.setZeroState = self._assignInitialStateOp(self.zeroState)
+
         Layer.buildGraph(self, activations)
 
     def resetHiddenLayer(self, sess, newState=None):
+        print "Warning: Adding a new op to the graph."
         if newState is None:
             newState = self.cell.zero_state(self.batchSize, tf.float32)
         sess.run(self._assignInitialStateOp(newState))
@@ -421,7 +432,8 @@ class BasicGRU(Layer):
         if self.nLayers > 1:
             """ Bit of a hack here, returning a useless identy op.
                 The desired assign op is forced by control_dependencies. """
-            with tf.control_dependencies([self.h[i].assign(state) for i, state in enumerate(newState)]):
+            with tf.control_dependencies(
+                [self.h[i].assign(state) for i, state in enumerate(newState)]):
                 return tf.identity(1)
         else:
             return self.h.assign(newState)
@@ -515,8 +527,9 @@ class Network:
     def inputLayer(self, nFeatures, applyOneHot=False, dtype=tf.float32, inputTensor=None):
         self.__addLayerWithScope__(InputLayer, nFeatures, applyOneHot, dtype, inputTensor)
 
-    def embeddingLayer(self, numEmbeddings, embeddingDim, lookupTensor=None):
-        self.__addLayerWithScope__(EmbeddingLayer, numEmbeddings, embeddingDim, lookupTensor)
+    def embeddingLayer(self, numEmbeddings, embeddingDim, lookupTensor=None, trainable=True):
+        self.__addLayerWithScope__(EmbeddingLayer, numEmbeddings, embeddingDim, lookupTensor,
+            trainable=trainable)
 
     def defineDecodeInLayer(self, nFeatures, applyOneHot=False, dtype=tf.float32):
         self.decodeInLayer = InputLayer(nFeatures, applyOneHot, dtype)
