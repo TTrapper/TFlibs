@@ -380,17 +380,12 @@ class BasicGRU(Layer):
         assert nLayers > 0
         if nLayers > 1:
             self.cell = tf.nn.rnn_cell.MultiRNNCell([self.cell]*nLayers)
-
         if initialState is None:
             self.zeroState = self.cell.zero_state(batchSize, tf.float32)
             if nLayers > 1:
-                self.h = []
-                for i, state in enumerate(self.zeroState):
-                    name = "initialSate_" + str(i)
-                    self.h.append(tf.get_variable(name, initializer=state, trainable=False))
-                self.h = tuple(self.h)
+                self.h = tuple([tf.Variable(state, trainable=False) for state in self.zeroState])
             else:
-                self.h = tf.get_variable("initialState", initializer=self.zeroState, trainable=False)
+                self.h = tf.Variable(self.zeroState, trainable=False)
         else:
             if saveState is True:
                 raise ValueError("saveState is not supported with external initialState.")
