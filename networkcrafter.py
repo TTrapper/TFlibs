@@ -412,16 +412,29 @@ class BasicGRU(Layer):
         else:
             activations = self._getActivations(self.outSequence)
 
-        # Add an op to graph for resetting the initial state to zero
+        # Add an ops to graph for resetting the initial state to zero or some value
         self.setZeroState = self._assignInitialStateOp(self.zeroState)
+        if self.nLayers == 1:
+            self.newState = tf.placeholder(tf.float32)
+        else:
+            self.newState = []
+            [self.newState.append(tf.placeholder(tf.float32)) for i in range(self.nLayers)]
+        self.setNewState = self._assignInitialStateOp(self.newState)
 
         Layer.buildGraph(self, activations)
 
     def resetHiddenLayer(self, sess, newState=None):
-        print "Warning: Adding a new op to the graph."
         if newState is None:
-            newState = self.cell.zero_state(self.batchSize, tf.float32)
-        sess.run(self._assignInitialStateOp(newState))
+            sess.run(self.setZeroState)
+        else:
+            if self.nLayers == 1:
+                feedDict = {self.newState:newState}
+            else:
+                feedDict = {}
+                for i in range(self.nLayers):
+                    feedDict.update({self.newState[i]: newState[i]})
+            sess.run(self.setNewState, feed_dict=feedDict)
+
 
     def _assignInitialStateOp(self, newState):
         if self.nLayers > 1:

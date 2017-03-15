@@ -439,6 +439,52 @@ class TestLayerOutputs(unittest.TestCase):
             net, gru = getNetwork(nLayers=3, scopeName="multiLayer")
             doTests()
 
+    def test_GRUBasic_stateSetting(self):
+
+        nNodes = 1
+        nIn = 3
+        maxInLen = 4 # This best be even
+        batchSize = 2
+
+        def getNetwork(nLayers, scopeName):
+            net = nc.Network(scopeName)
+            net.inputLayer(nIn)
+            net.basicGRU(nNodes, nLayers=nLayers, maxSeqLen=maxInLen, batchSize=batchSize, saveState=True)
+            net.buildGraph()
+            gru = net.outLayer
+
+            sess.run(tf.global_variables_initializer())
+            return net, gru
+
+        def stateToList(state, nLayers):
+            if nLayers > 1:
+                return [state[i].eval().tolist() for i in range(nLayers)]
+            else:
+                return state.eval().tolist()
+
+        def doTests(nLayers):
+            out = net.forward(sess, inputs, sequenceLengths=maxInLen)
+            stateOut = stateToList(gru.h, nLayers)
+            gru.resetHiddenLayer(sess)
+            # After reset the state should be the zero state
+            self.assertEqual(stateToList(gru.zeroState, nLayers), stateToList(gru.h, nLayers))
+            gru.resetHiddenLayer(sess, stateOut)
+            # After resetting to value the state should eval to that value
+            self.assertEqual(stateOut, stateToList(gru.h, nLayers))
+
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+            inputs = np.random.rand(maxInLen*batchSize, nIn)
+
+            # Single Layer
+            net, gru = getNetwork(nLayers=1, scopeName="singleLayer")
+            doTests(nLayers=1)
+
+            # Multi-Layer
+            nLayers = 3
+            net, gru = getNetwork(nLayers, scopeName="multiLayer")
+            doTests(nLayers=3)
+
     def test_seq2SeqBasic_feedPrev(self):
 
         tf.reset_default_graph()
