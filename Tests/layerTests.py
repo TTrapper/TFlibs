@@ -7,7 +7,7 @@ def testDropout(layer, expectDropoutOn):
    if expectDropoutOn:
         return layer.applyDropout and (type(layer.keepProb) is tf.Tensor)
    else:
-        return (not layer.applyDropout) and (layer.keepProb is None)
+        return (not layer.applyDropout)
 
 class TestLayerInitialization(unittest.TestCase):
 
@@ -54,7 +54,6 @@ class TestLayerGraphBuild(unittest.TestCase):
                 layer.buildGraph(shape)
             layer.buildGraph(tf.constant(np.ones(shape)))
             self.assertTrue(isinstance(layer.activations, tf.Tensor))
-            self.assertTrue(layer.keepProb is None)
             manuallyActivated = sess.run(tf.nn.softmax(layer.weightedInputs))
             self.assertEqual(sess.run(layer.activations).tolist(), manuallyActivated.tolist())
 
