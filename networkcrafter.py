@@ -1,13 +1,12 @@
 import numpy as np
 import tensorflow as tf
 
-class Layer:
+class Layer(object):
 
     def __init__(self, shape, activationFunction=None, dropout=False):
 
         self.activationFunction = activationFunction
         self.shape = shape
-        self.keepProb = None
         self.applyDropout = dropout
 
     def buildGraph(self, weightedInputs):
@@ -23,9 +22,8 @@ class Layer:
                 str(type(self.activations)))
 
         if self.applyDropout is True:
-            self.keepProb = tf.placeholder(tf.float32)
+            self.keepProb = tf.placeholder(tf.float32, name="keepProb")
             self.activations = tf.nn.dropout(self.activations, self.keepProb)
-
 
 class InputLayer(Layer):
 
@@ -53,9 +51,9 @@ class InputLayer(Layer):
 
 class EmbeddingLayer(Layer):
 
-    def __init__(self, numEmbeddings, embeddingDim, lookupTensor=None, trainable=True):
+    def __init__(self, numEmbeddings, embeddingDim, lookupTensor=None, trainable=True, dropout=False):
 
-        Layer.__init__(self, shape=[numEmbeddings, embeddingDim])
+        Layer.__init__(self, shape=[numEmbeddings, embeddingDim], dropout=dropout)
 
         self.embeddings = tf.get_variable("embeddings", self.shape, trainable=trainable)
         if lookupTensor is not None:
@@ -367,6 +365,7 @@ class BasicGRU(Layer):
         self.nLayers = nLayers
         self.maxSeqLen = maxSeqLen
         self.batchSize = batchSize
+        self.dropout = dropout
         self.saveState = saveState
         self.activationsAreFinalState = activationsAreFinalState
         if sequenceLengths is None:
@@ -376,6 +375,11 @@ class BasicGRU(Layer):
 
         # Tensorflow's built in GRU cell
         self.cell = tf.nn.rnn_cell.GRUCell(nNodes)
+
+        #self.applyDropout = dropout
+        if dropout:
+            self.keepProb = tf.placeholder(tf.float32, name="keepProb")
+            self.cell = tf.nn.rnn_cell.DropoutWrapper(self.cell, output_keep_prob=self.keepProb)
 
         assert nLayers > 0
         if nLayers > 1:
@@ -391,7 +395,8 @@ class BasicGRU(Layer):
                 raise ValueError("saveState is not supported with external initialState.")
             self.h = initialState
 
-        Layer.__init__(self, [nNodes, nNodes], dropout=dropout)
+
+        Layer.__init__(self, [nNodes, nNodes], dropout=False)
 
     def buildGraph(self):
 
@@ -422,6 +427,8 @@ class BasicGRU(Layer):
         self.setNewState = self._assignInitialStateOp(self.newState)
 
         Layer.buildGraph(self, activations)
+        # applyDropout was false during Layer.buildGraph so that keepProb was not overwritten
+        self.applyDropout = self.dropout
 
     def resetHiddenLayer(self, sess, newState=None):
         if newState is None:
@@ -535,16 +542,18 @@ class Network:
     def inputLayer(self, nFeatures, applyOneHot=False, dtype=tf.float32, inputTensor=None):
         self.__addLayerWithScope__(InputLayer, nFeatures, applyOneHot, dtype, inputTensor)
 
-    def embeddingLayer(self, numEmbeddings, embeddingDim, lookupTensor=None, trainable=True):
+    def embeddingLayer(self, numEmbeddings, embeddingDim, lookupTensor=None, trainable=True, dropout=False):
         self.__addLayerWithScope__(EmbeddingLayer, numEmbeddings, embeddingDim, lookupTensor,
-            trainable=trainable)
+            trainable=trainable, dropout=dropout)
 
     def defineDecodeInLayer(self, nFeatures, applyOneHot=False, dtype=tf.float32):
         self.decodeInLayer = InputLayer(nFeatures, applyOneHot, dtype)
 
     def defineTargets(self, nNodes, applyOneHot, dtype=tf.float32):
-        self.targets = InputLayer(nNodes, applyOneHot, dtype)
-        self.targetVals = self.targets.activations
+        with tf.variable_scope(self.scope):
+            with tf.variable_scope("targets"):
+                self.targets = InputLayer(nNodes, applyOneHot, dtype)
+                self.targetVals = self.targets.activations
 
     def fullConnectLayer(self,  nNodes, activationFunction, dropout=False, addBias=True,
         wTranspose=False):
@@ -608,11 +617,11 @@ class Network:
             Seq2SeqDynamic, self.outLayer, self.decodeInLayer, nNodes, batchSize)
 
     def __addLayerWithScope__(self, layerClass, *args, **kwargs):
-
         with tf.variable_scope(self.scope):
-           layerScopeName = "layer" + str(len(self.layers)) + "_" + layerClass.__name__
-           with tf.variable_scope(layerScopeName):
-               self.__addLayer__(layerClass(*args, **kwargs))
+            with tf.name_scope(self.nameScope):
+                layerScopeName = "layer" + str(len(self.layers)) + "_" + layerClass.__name__
+                with tf.variable_scope(layerScopeName):
+                    self.__addLayer__(layerClass(*args, **kwargs))
 
     def __addLayer__(self, layer):
         if (len(self.layers) == 0):
@@ -624,8 +633,13 @@ class Network:
         initializer=tf.contrib.layers.xavier_initializer()):
         self.scopeName = scopeName
         self.reuseVariables = reuseVariables
+
+        with tf.name_scope(scopeName) as nameScope:
+            self.nameScope = nameScope
+
         with tf.variable_scope(scopeName, reuse=reuseVariables, initializer=initializer) as scope:
-            self.scope=scope
+            self.scope = scope
+
         self.decodeInLayer = None
         self.layers = []
 
@@ -636,9 +650,10 @@ class Network:
     def buildGraph(self):
         for i, layer in enumerate(self.layers):
             with tf.variable_scope(self.scope):
-                layerScopeName = "layer" + str(i) + "_" + type(layer).__name__
-                with tf.variable_scope(layerScopeName):
-                    layer.buildGraph()
+                with tf.name_scope(self.nameScope):
+                    layerScopeName = "layer" + str(i) + "_" + type(layer).__name__
+                    with tf.variable_scope(layerScopeName):
+                        layer.buildGraph()
         self.outputs = self.outLayer.activations
 
     def setInputs(self, inputTensor):
@@ -703,7 +718,6 @@ class Network:
             feedDict[self.decodeInLayer.inputs] = decoderInputs
 
         feedDict.update(extras)
-
         return feedDict
 
     def resetRecurrentHiddens(self, sess):
