@@ -27,10 +27,12 @@ class Layer(object):
 
 class InputLayer(Layer):
 
-    def __init__(self, nFeatures, applyOneHot=False, dtype=tf.float32, inputTensor=None):
+    def __init__(self,
+        nFeatures, applyOneHot=False, dtype=tf.float32, inputTensor=None, dropout=False):
+
         shape = [None, nFeatures]
 
-        Layer.__init__(self, shape)
+        Layer.__init__(self, shape, dropout=dropout)
         if applyOneHot:
             if inputTensor is not None:
                 self.inputs = inputTensor
@@ -539,8 +541,9 @@ class Seq2SeqDynamic(Layer):
 
 class Network:
 
-    def inputLayer(self, nFeatures, applyOneHot=False, dtype=tf.float32, inputTensor=None):
-        self.__addLayerWithScope__(InputLayer, nFeatures, applyOneHot, dtype, inputTensor)
+    def inputLayer(self,
+        nFeatures, applyOneHot=False, dtype=tf.float32, inputTensor=None, dropout=False):
+        self.__addLayerWithScope__(InputLayer, nFeatures, applyOneHot, dtype, inputTensor, dropout)
 
     def embeddingLayer(self, numEmbeddings, embeddingDim, lookupTensor=None, trainable=True, dropout=False):
         self.__addLayerWithScope__(EmbeddingLayer, numEmbeddings, embeddingDim, lookupTensor,
@@ -655,6 +658,8 @@ class Network:
                     with tf.variable_scope(layerScopeName):
                         layer.buildGraph()
         self.outputs = self.outLayer.activations
+        self.inputs = None if not hasattr(self.inLayer, 'inputs') else self.inLayer.inputs
+
 
     def setInputs(self, inputTensor):
         self.inLayer.activations = inputTensor
@@ -696,7 +701,7 @@ class Network:
         feedDict = {}
         # Define the feed_dict for a forward pass
         if inputs is not None:
-            feedDict[self.inLayer.inputs] = inputs
+            feedDict[self.inputs] = inputs
 
         # Add keepProb to layers with dropout. Add sequence info to recurrent layers.
         for layer in self.layers:
