@@ -53,7 +53,8 @@ class InputLayer(Layer):
 
 class EmbeddingLayer(Layer):
 
-    def __init__(self, numEmbeddings, embeddingDim, lookupTensor=None, trainable=True, dropout=False):
+    def __init__(self,
+        numEmbeddings, embeddingDim, lookupTensor=None, trainable=True, dropout=False):
 
         Layer.__init__(self, shape=[numEmbeddings, embeddingDim], dropout=dropout)
 
@@ -545,7 +546,8 @@ class Network:
         nFeatures, applyOneHot=False, dtype=tf.float32, inputTensor=None, dropout=False):
         self.__addLayerWithScope__(InputLayer, nFeatures, applyOneHot, dtype, inputTensor, dropout)
 
-    def embeddingLayer(self, numEmbeddings, embeddingDim, lookupTensor=None, trainable=True, dropout=False):
+    def embeddingLayer(self,
+        numEmbeddings, embeddingDim, lookupTensor=None, trainable=True, dropout=False):
         self.__addLayerWithScope__(EmbeddingLayer, numEmbeddings, embeddingDim, lookupTensor,
             trainable=trainable, dropout=dropout)
 
@@ -591,7 +593,8 @@ class Network:
     def gruLayer(self, nNodes, dropout=False):
         self.__addLayerWithScope__(GRU, self.outLayer, nNodes, dropout)
 
-    def basicGRU(self, nNodes, nLayers=1, maxSeqLen=10, sequenceLengths=None, batchSize=1, dropout=False,
+    def basicGRU(self,
+        nNodes, nLayers=1, maxSeqLen=10, sequenceLengths=None, batchSize=1, dropout=False,
         initialState=None, saveState=True, activationsAreFinalState=False):
 
         self.__addLayerWithScope__(
@@ -599,7 +602,8 @@ class Network:
             batchSize=batchSize, dropout=dropout, initialState=initialState, saveState=saveState,
             activationsAreFinalState=activationsAreFinalState)
 
-    def dynamicGRU(self, nNodes, nLayers=1, maxSeqLen=10, sequenceLengths=None, batchSize=1, dropout=False,
+    def dynamicGRU(self,
+        nNodes, nLayers=1, maxSeqLen=10, sequenceLengths=None, batchSize=1, dropout=False,
         initialState=None, saveState=True, activationsAreFinalState=False):
 
         self.__addLayerWithScope__(
@@ -647,7 +651,8 @@ class Network:
         self.layers = []
 
     def setInitializer(self, initializer):
-        with tf.variable_scope(self.scopeName, reuse=self.reuseVariables, initializer=initializer) as scope:
+        with tf.variable_scope(
+            self.scopeName, reuse=self.reuseVariables, initializer=initializer) as scope:
             self.scope=scope
 
     def buildGraph(self):
