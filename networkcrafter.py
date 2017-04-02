@@ -106,7 +106,7 @@ class ConcatLayer(Layer):
         Layer.__init__(self, shape, dropout=dropout)
 
     def buildGraph(self):
-        activations = tf.concat(1, [self.inLayer.activations, self.concatTensor])
+        activations = tf.concat(axis=1, values=[self.inLayer.activations, self.concatTensor])
         Layer.buildGraph(self, activations)
 
 class AdditionLayer(Layer):
@@ -264,8 +264,8 @@ class GRU(Layer):
             r = tf.nn.sigmoid(xR_t + tf.matmul(h, self.hRW) + self.hRB)
 
             # Compute new h value,
-            hCandidate = tf.tanh(x_t + tf.matmul(tf.mul(r, h), self.hW) + self.hB)
-            h = tf.mul((1-u), hCandidate) + tf.mul(u, hCandidate)
+            hCandidate = tf.tanh(x_t + tf.matmul(tf.multiply(r, h), self.hW) + self.hB)
+            h = tf.multiply((1-u), hCandidate) + tf.multiply(u, hCandidate)
 
             return idx+1, self.h.assign(h), hSequence.write(idx, h)
 
@@ -377,16 +377,16 @@ class BasicGRU(Layer):
             self.sequenceLengths = sequenceLengths
 
         # Tensorflow's built in GRU cell
-        self.cell = tf.nn.rnn_cell.GRUCell(nNodes)
+        self.cell = tf.contrib.rnn.GRUCell(nNodes)
 
         #self.applyDropout = dropout
         if dropout:
             self.keepProb = tf.placeholder(tf.float32, name="keepProb")
-            self.cell = tf.nn.rnn_cell.DropoutWrapper(self.cell, output_keep_prob=self.keepProb)
+            self.cell = tf.contrib.rnn.DropoutWrapper(self.cell, output_keep_prob=self.keepProb)
 
         assert nLayers > 0
         if nLayers > 1:
-            self.cell = tf.nn.rnn_cell.MultiRNNCell([self.cell]*nLayers)
+            self.cell = tf.contrib.rnn.MultiRNNCell([self.cell]*nLayers)
         if initialState is None:
             self.zeroState = self.cell.zero_state(batchSize, tf.float32)
             if nLayers > 1:
@@ -405,13 +405,12 @@ class BasicGRU(Layer):
 
         # Assumption that data has rank-2 on the way in, reshape to get a batch of sequences
         self.sequence = \
-            tf.reshape(self.inLayer.activations, [-1, self.maxSeqLen, self.inLayer.shape[-1]])
-        self.sequence = tf.unpack(self.sequence, self.maxSeqLen, axis=1)
+            tf.reshape(self.inLayer.activations, [self.batchSize, -1, self.inLayer.shape[-1]])
 
         # Create outputs and state graph
-        outputs, self.state = tf.nn.rnn(self.cell, self.sequence, \
+        outputs, self.state = tf.nn.dynamic_rnn(self.cell, self.sequence, \
             initial_state=self.h, sequence_length=self.sequenceLengths, dtype=tf.float32)
-        self.outSequence = tf.concat(1, outputs)
+        self.outSequence = tf.concat(axis=1, values=outputs)
 
         if self.saveState:
             # Control depency forces the hidden state to persist
@@ -474,6 +473,8 @@ class Seq2SeqBasic(Layer):
         self.nNodes = nNodes
         nFeaturesEn = encodeInLayer.shape[-1]
         nFeaturesDe = decodeInLayer.shape[-1]
+        self.nFeaturesEn = nFeaturesEn
+        self.nFeaturesDe = nFeaturesDe
 
         self.enSequenceLengths = \
             tf.placeholder(dtype=tf.int32, name="Seq2SeqEnLengths")
@@ -481,14 +482,16 @@ class Seq2SeqBasic(Layer):
         self.encodeInputs = tf.reshape(encodeInLayer.activations, [-1, enSeqLength, nFeaturesEn])
         self.decodeInputs = tf.reshape(decodeInLayer.activations, [-1, deSeqLength, nFeaturesDe])
 
-        self.encodeInputs = tf.unpack(self.encodeInputs, enSeqLength, axis=1)
-        self.decodeInputs = tf.unpack(self.decodeInputs, deSeqLength, axis=1)
+        self.encodeInputs = tf.unstack(self.encodeInputs, enSeqLength, axis=1)
+        self.decodeInputs = tf.unstack(self.decodeInputs, deSeqLength, axis=1)
 
         # Passed to decoder, determines whether to pass in the decodeInputs or the prvious pred
         self.feedPrev = tf.Variable(tf.constant(feedPrev))
 
-        self.cell = tf.nn.rnn_cell.GRUCell(nNodes)
-        self.cell = tf.nn.rnn_cell.MultiRNNCell([self.cell]*2)
+        self.enCell = tf.contrib.rnn.GRUCell(nNodes)
+        self.enCell = tf.contrib.rnn.MultiRNNCell([self.enCell]*2)
+        self.deCell = tf.contrib.rnn.GRUCell(nNodes)
+        self.deCell = tf.contrib.rnn.MultiRNNCell([self.deCell]*2)
 
         self.readout = readout
         def loopFunction(prev, i):
@@ -506,12 +509,13 @@ class Seq2SeqBasic(Layer):
 
     def buildGraph(self):
 
-        _, self.encodedState = tf.nn.rnn(self.cell, self.encodeInputs, dtype=tf.float32,\
-            sequence_length=self.enSequenceLengths)
-        outputs, state = tf.nn.seq2seq.rnn_decoder(self.decodeInputs, self.encodedState, \
-            self.cell, loop_function=self.loopFunction)
+        self.encodeInputs = tf.reshape(self.encodeInputs, [1, -1, self.nFeaturesEn])
+        _, self.encodedState = tf.nn.dynamic_rnn(self.enCell, self.encodeInputs,\
+            sequence_length=self.enSequenceLengths, dtype=tf.float32)
+        outputs, state = tf.contrib.legacy_seq2seq.rnn_decoder(self.decodeInputs,
+            initial_state=self.encodedState, cell=self.deCell, loop_function=self.loopFunction)
 
-        activations = tf.concat(1, outputs)
+        activations = tf.concat(axis=1, values=outputs)
         activations = tf.reshape(activations, [-1, self.nNodes])
         Layer.buildGraph(self, activations)
 
