@@ -629,10 +629,9 @@ class Network:
 
     def __addLayerWithScope__(self, layerClass, *args, **kwargs):
         with tf.variable_scope(self.scope):
-            with tf.name_scope(self.nameScope):
-                layerScopeName = "layer" + str(len(self.layers)) + "_" + layerClass.__name__
-                with tf.variable_scope(layerScopeName):
-                    self.__addLayer__(layerClass(*args, **kwargs))
+            layerScopeName = "layer" + str(len(self.layers)) + "_" + layerClass.__name__
+            with tf.variable_scope(layerScopeName):
+                self.__addLayer__(layerClass(*args, **kwargs))
 
     def __addLayer__(self, layer):
         if (len(self.layers) == 0):
@@ -644,9 +643,6 @@ class Network:
         initializer=tf.contrib.layers.xavier_initializer()):
         self.scopeName = scopeName
         self.reuseVariables = reuseVariables
-
-        with tf.name_scope(scopeName) as nameScope:
-            self.nameScope = nameScope
 
         with tf.variable_scope(scopeName, reuse=reuseVariables, initializer=initializer) as scope:
             self.scope = scope
@@ -662,9 +658,8 @@ class Network:
     def buildGraph(self):
         for i, layer in enumerate(self.layers):
             with tf.variable_scope(self.scope):
-                with tf.name_scope(self.nameScope):
-                    layerScopeName = "layer" + str(i) + "_" + type(layer).__name__
-                    with tf.variable_scope(layerScopeName):
+                layerScopeName = "layer" + str(i) + "_" + type(layer).__name__
+                with tf.variable_scope(layerScopeName):
                         layer.buildGraph()
         self.outputs = self.outLayer.activations
         self.inputs = None if not hasattr(self.inLayer, 'inputs') else self.inLayer.inputs
