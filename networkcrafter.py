@@ -650,11 +650,6 @@ class Network:
         self.decodeInLayer = None
         self.layers = []
 
-    def setInitializer(self, initializer):
-        with tf.variable_scope(
-            self.scopeName, reuse=self.reuseVariables, initializer=initializer) as scope:
-            self.scope=scope
-
     def buildGraph(self):
         for i, layer in enumerate(self.layers):
             with tf.variable_scope(self.scope):
