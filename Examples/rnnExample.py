@@ -4,12 +4,8 @@ import numpy as np
 import time
 tf = nc.tf
 
-trainingSequence = 'The quick brown fox jumps over the lazy dog.'
-#trainingSequence = 'The quick brown fox jumps over the lazy dog. The dog doesn\'t care much, so she decides that next time the fox jumps over her, she\'s going to be asleep. Later on, the fox did jump over the dog and, seeing no surprise in the in her whatsoever, felt annoyed. The fox, quick as it was, pounce on the dog and nipped her ear before sprinting off into the forest. Foxes are sly, but dogs are keen. The dog, now having been awaken from her slumber, had been keened indeed. It was time for a game. A game that not only used all of the letters, but would also decide who among them was the better hunter, hider, trapper, coniver.'
+
 trainingSequence = 'The quick brown fox jumps over the lazy dog. The dog doesn\'t care much, so she decides that next time the fox jumps over her, she\'s going to be asleep.'
-#trainingSequence = 'a b c d e f g h i j k l m n o p q r s t u v w x y z'
-#trainingSequence='abcdefghijklmnopqrstuvwxyz'
-#trainingSequence='aab'
 
 # Convert the string to list of chars 
 print trainingSequence
@@ -32,20 +28,14 @@ else:
     targetBatches = [targets]
     sourceBatches = [sources]
 
-sess = tf.InteractiveSession()
+sess = tf.Session()
 
 # The RNN
 network = nc.Network()
 network.inputLayer(NUM_CHARS, applyOneHot=True)
-network.rnnLayer(50)
-network.gruLayer(100)
-network.reshapeLayer([1, -1, 100])
-network.dynamicGRU(100, nLayers=2)
-network.reshapeLayer([-1, 100])
+network.basicGRU(100, nLayers=2)
 network.fullConnectLayer(NUM_CHARS, tf.nn.softmax)
 network.buildGraph()
-
-
 # Create a placeholder for target values. 
 network.defineTargets(NUM_CHARS, applyOneHot=True)
 
@@ -54,9 +44,7 @@ cross_entropy = -tf.reduce_sum(network.targetVals*tf.log(network.outLayer.activa
 train_step = tf.train.AdamOptimizer(1e-3).minimize(cross_entropy)
 
 
-writer = tf.train.SummaryWriter("./tensorlog", sess.graph)
-sess.run(tf.initialize_all_variables())
-
+sess.run(tf.global_variables_initializer())
 start = time.time()
 
 # Training
@@ -64,7 +52,7 @@ for i in range(200):
 
     for sources, targets in zip(sourceBatches, targetBatches):
         feed = network.getFeedDict(sources, 0.5, targets=targets, sequenceLengths=sources.shape)
-        train_step.run(feed_dict=feed)
+        train_step.run(session=sess, feed_dict=feed)
 
     network.resetRecurrentHiddens(sess) 
 
@@ -75,6 +63,4 @@ for i in range(200):
             print ''.join([num2Char[num] for num in predictions])
 
         network.resetRecurrentHiddens(sess) 
-#        print network.hiddens[0].h.eval()
-#        print network.hiddens[1].h.eval()
 print time.time()-start

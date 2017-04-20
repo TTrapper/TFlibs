@@ -484,44 +484,6 @@ class TestLayerOutputs(unittest.TestCase):
             net, gru = getNetwork(nLayers, scopeName="multiLayer")
             doTests(nLayers=3)
 
-    def test_seq2SeqBasic_feedPrev(self):
-
-        tf.reset_default_graph()
-        with tf.Session() as sess:
-
-            nNodes = 3
-            nOut = 2
-            nIn = 5
-            outLen = 10
-            inLen = 3
-
-            readout = nc.Network()
-            readout.inputLayer(nNodes)
-            readout.fullConnectLayer(nOut, None)
-
-            encodeIn = nc.InputLayer(nIn, applyOneHot=True)
-            decodeIn = nc.InputLayer(nOut, applyOneHot=True)
-
-            seq2seq = nc.Seq2SeqBasic(encodeIn, decodeIn, nNodes, inLen, outLen, readout)
-            seq2seq.buildGraph()
-
-            readout.buildGraph()
-
-            enData = np.ones([inLen])
-            deData = 2*np.ones([outLen])
-
-            sess.run(tf.global_variables_initializer())
-
-            feed = {encodeIn.inputs:enData, decodeIn.inputs:deData, seq2seq.enSequenceLengths:[3]}
-            outFeedDecode = sess.run(seq2seq.activations, feed_dict=feed).tolist()
-            seq2seq.setFeedPrevious(True, sess)
-            outFeedPrev = sess.run(seq2seq.activations, feed_dict=feed).tolist()
-            readoutFeedDecode = sess.run(readout.outLayer.activations, feed_dict=feed).tolist()
-
-
-            self.assertFalse(outFeedDecode == outFeedPrev)
-
-
 
     def test_concatLayer(self):
         tf.reset_default_graph()

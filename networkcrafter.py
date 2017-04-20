@@ -176,187 +176,6 @@ class ReshapeLayer(Layer):
         activations = tf.reshape(self.inLayer.activations, self.shape, name="reshapeLayer")
         Layer.buildGraph(self, activations)
 
-class RNN(Layer):
-
-    def __init__(self, inLayer, nNodes, dropout=False):
-
-        self.inLayer = inLayer
-
-        # Inputs get re-represented in same dimensions as hidden state
-        self.xTransform = FullConnectLayer(inLayer, nNodes, None)
-
-        # Weights for recurrent connection
-        self.hW = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
-        self.hB = tf.Variable(tf.zeros([nNodes]))
-
-        # Hidden state/memory
-        self.h = tf.Variable(tf.zeros([nNodes]))
-
-        Layer.__init__(self, [nNodes, nNodes], dropout=dropout)
-
-    def buildGraph(self):
-        self.xTransform.buildGraph()
-
-        # Function used by scan, applied to each input example
-        def scanInputs(h,x):
-            # Need to add a dim to h so we can apply matrix multiplication (recurrent update)
-            h_row = tf.expand_dims(h,0)
-            uH = tf.matmul(h_row, self.hW) + self.hB
-            # Add the inputs, squeeze it back to rank 1. Will be packed into a matrix by scan().
-            hPlusX = tf.squeeze(tf.tanh(x + uH))
-
-            return hPlusX
-
-        activations = tf.scan(scanInputs, self.xTransform.activations, initializer=self.h)
-        Layer.buildGraph(self, activations)
-
-    def resetHiddenLayer(self, sess):
-        self.h.assign(tf.zeros([self.shape[0]])).eval(session=sess)
-
-
-class GRU(Layer):
-
-    def __init__(self, inLayer, nNodes, dropout=False):
-        self.inLayer = inLayer
-
-        # Rerepresent inputs with same Dims as hidden state. Also reset and input gates.
-        self.xTransform = FullConnectLayer(inLayer, nNodes, None)
-        self.xResets    = FullConnectLayer(inLayer, nNodes, None)
-        self.xUpdates   = FullConnectLayer(inLayer, nNodes, None)
-
-        # Recurrent weights, update and reset weights
-        self.hW  = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
-        self.hUW = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
-        self.hRW = tf.Variable(tf.truncated_normal([nNodes, nNodes], stddev=0.1))
-
-        # Biases
-        self.hB  = tf.Variable(tf.zeros([nNodes]))
-        self.hUB = tf.Variable(tf.zeros([nNodes]))
-        self.hRB = tf.Variable(tf.zeros([nNodes]))
-
-        # Hidden state/memory
-        self.h = tf.Variable(tf.zeros([1, nNodes]))
-
-        Layer.__init__(self, [nNodes, nNodes], dropout=dropout)
-
-    def buildGraph(self):
-        self.nTimeSteps = tf.shape(self.inLayer.activations)[0]
-
-        self.xTransform.buildGraph()
-        self.xResets.buildGraph()
-        self.xUpdates.buildGraph()
-
-        # Loop counter
-        index = tf.constant(0, dtype=tf.int32)
-        loopParams = [index,\
-                      self.h,\
-                      tf.TensorArray(dtype=tf.float32, size=self.nTimeSteps, dynamic_size=False)]
-
-        # Each iteration performs one step of RNN update, produces series of hidden states
-        def updateLoopBody(idx, h, hSequence):
-            # Grab weighted representation of the current input
-            x_t  = tf.slice(self.xTransform.activations, [idx, 0], [1, -1])
-            xU_t = tf.slice(self.xUpdates.activations, [idx, 0], [1, -1])
-            xR_t = tf.slice(self.xResets.activations, [idx, 0], [1, -1])
-
-            # Reset and update gates
-            u = tf.nn.sigmoid(xU_t + tf.matmul(h, self.hUW) + self.hUB)
-            r = tf.nn.sigmoid(xR_t + tf.matmul(h, self.hRW) + self.hRB)
-
-            # Compute new h value,
-            hCandidate = tf.tanh(x_t + tf.matmul(tf.multiply(r, h), self.hW) + self.hB)
-            h = tf.multiply((1-u), hCandidate) + tf.multiply(u, hCandidate)
-
-            return idx+1, self.h.assign(h), hSequence.write(idx, h)
-
-        # The update loop runs for each example in the batch.
-        condition = lambda idx, h, activations: tf.less(idx, self.nTimeSteps)
-        _, _, hStates = tf.while_loop(condition, updateLoopBody, loopParams)
-
-        Layer.buildGraph(self, hStates.concat())
-
-    def resetHiddenLayer(self, sess):
-        self.h.assign(tf.zeros([1, self.shape[0]])).eval(session=sess)
-
-class DynamicGRU(Layer):
-
-    def __init__(self, inLayer, nNodes, nLayers, maxSeqLen, sequenceLengths=None, batchSize=1,
-        dropout=False, initialState=None, saveState=True, activationsAreFinalState=False):
-
-        self.inLayer = inLayer
-        self.nNodes = nNodes
-        self.nLayers = nLayers
-        self.maxSeqLen = maxSeqLen
-        self.batchSize = batchSize
-        self.saveState = saveState
-        self.activationsAreFinalState = activationsAreFinalState
-        if sequenceLengths is None:
-            self.sequenceLengths = tf.placeholder(dtype=tf.int32, name="BasicGRUSeqLen")
-        else:
-            self.sequenceLengths = sequenceLengths
-
-        # Tensorflow's built in GRU cell
-        self.cell = tf.nn.rnn_cell.GRUCell(nNodes)
-        assert nLayers > 0
-        if nLayers > 1:
-            self.cell = tf.nn.rnn_cell.MultiRNNCell([self.cell]*nLayers)
-
-        if initialState is None:
-            self.h = self.cell.zero_state(batchSize, tf.float32)
-            if nLayers > 1:
-                self.h = tuple([tf.Variable(state, trainable=False) for state in self.h])
-            else:
-                self.h = tf.Variable(self.h, trainable=False)
-
-        else:
-            if saveState is True:
-                raise ValueError("saveState is not supported with external initialState.")
-            self.h = initialState
-
-        Layer.__init__(self, [nNodes, nNodes], dropout=dropout)
-
-    def buildGraph(self):
-        # Assumption that data has rank-2 on the way in, reshape to get a batch of sequences
-        self.sequence = \
-            tf.reshape(self.inLayer.activations, [self.batchSize, -1, self.inLayer.shape[-1]])
-
-        # Create outputs and state graph
-        outputs, self.state = tf.nn.dynamic_rnn(self.cell, self.sequence, initial_state=self.h,\
-            sequence_length=self.sequenceLengths, swap_memory=True)
-        self.outSequence = outputs
-
-        if self.saveState:
-            # Control depency forces the hidden state to persist
-            with tf.control_dependencies([self._assignInitialStateOp(self.state)]):
-                activations = self._getActivations(self.outSequence)
-        else:
-            activations = self._getActivations(self.outSequence)
-
-        Layer.buildGraph(self, activations)
-
-    def resetHiddenLayer(self, sess, newState=None):
-        if newState is None:
-            newState = self.cell.zero_state(self.batchSize, tf.float32)
-        sess.run(self._assignInitialStateOp(newState))
-
-    def _assignInitialStateOp(self, newState):
-        if self.nLayers > 1:
-            """ Bit of a hack here, returning a useless identy op.
-                The desired assign op is forced by control_dependencies. """
-            with tf.control_dependencies([self.h[i].assign(state) for i, state in enumerate(newState)]):
-                return tf.identity(1)
-        else:
-            return self.h.assign(newState)
-
-    def _getActivations(self, outputs):
-        if self.activationsAreFinalState:
-            if self.nLayers > 1:
-                return tf.identity(self.state[-1])
-            else:
-                return tf.identity(self.state)
-        else:
-            # Stack the time and batch dimensions
-            return tf.reshape(outputs, [-1, self.nNodes])
 
 class BasicGRU(Layer):
 
@@ -465,84 +284,6 @@ class BasicGRU(Layer):
             # Stack the time and batch dimensions
             return tf.reshape(outputs, [-1, self.nNodes])
 
-class Seq2SeqBasic(Layer):
-
-    def __init__(self, encodeInLayer, decodeInLayer, nNodes, enSeqLength, deSeqLength,
-        readout=None, feedPrev=False):
-
-        self.nNodes = nNodes
-        nFeaturesEn = encodeInLayer.shape[-1]
-        nFeaturesDe = decodeInLayer.shape[-1]
-        self.nFeaturesEn = nFeaturesEn
-        self.nFeaturesDe = nFeaturesDe
-
-        self.enSequenceLengths = \
-            tf.placeholder(dtype=tf.int32, name="Seq2SeqEnLengths")
-
-        self.encodeInputs = tf.reshape(encodeInLayer.activations, [-1, enSeqLength, nFeaturesEn])
-        self.decodeInputs = tf.reshape(decodeInLayer.activations, [-1, deSeqLength, nFeaturesDe])
-
-        self.encodeInputs = tf.unstack(self.encodeInputs, enSeqLength, axis=1)
-        self.decodeInputs = tf.unstack(self.decodeInputs, deSeqLength, axis=1)
-
-        # Passed to decoder, determines whether to pass in the decodeInputs or the prvious pred
-        self.feedPrev = tf.Variable(tf.constant(feedPrev))
-
-        self.enCell = tf.contrib.rnn.GRUCell(nNodes)
-        self.enCell = tf.contrib.rnn.MultiRNNCell([self.enCell]*2)
-        self.deCell = tf.contrib.rnn.GRUCell(nNodes)
-        self.deCell = tf.contrib.rnn.MultiRNNCell([self.deCell]*2)
-
-        self.readout = readout
-        def loopFunction(prev, i):
-            feedDecodeIn = lambda : self.decodeInputs[i]
-            # Use readout graph provided to set the previous value to the network's output
-            if self.readout is not None:
-                self.readout.layers[1].inLayer.activations = prev
-                self.readout.buildGraph()
-                prev = self.readout.outputs
-            feedPredict = lambda : tf.one_hot(tf.argmax(prev, 1), nFeaturesDe)
-            return tf.cond(self.feedPrev, feedPredict, feedDecodeIn)
-        self.loopFunction = loopFunction
-
-        Layer.__init__(self, [nNodes])
-
-    def buildGraph(self):
-
-        self.encodeInputs = tf.reshape(self.encodeInputs, [1, -1, self.nFeaturesEn])
-        _, self.encodedState = tf.nn.dynamic_rnn(self.enCell, self.encodeInputs,\
-            sequence_length=self.enSequenceLengths, dtype=tf.float32)
-        outputs, state = tf.contrib.legacy_seq2seq.rnn_decoder(self.decodeInputs,
-            initial_state=self.encodedState, cell=self.deCell, loop_function=self.loopFunction)
-
-        activations = tf.concat(axis=1, values=outputs)
-        activations = tf.reshape(activations, [-1, self.nNodes])
-        Layer.buildGraph(self, activations)
-
-    def setFeedPrevious(self, boolVal, sess):
-        self.feedPrev.assign(boolVal).eval(session=sess)
-
-
-class Seq2SeqDynamic(Layer):
-
-    def __init__(self, encodeInLayer, decodeInLayer, nNodes, batchSize):
-        self.nNodes = nNodes
-        with tf.variable_scope("rnnEncode"):
-            encodeLayer = DynamicGRU(\
-                encodeInLayer, nNodes, nLayers=1, batchSize=batchSize, saveState=False)
-            self.encodeLayer = encodeLayer
-            encodeLayer.buildGraph()
-        with tf.variable_scope("rnnDecode"):
-            self.decodeLayer = DynamicGRU(decodeInLayer, nNodes, nLayers=1,\
-                 batchSize=batchSize, initialState=encodeLayer.state, saveState=False)
-            self.decodeLayer.buildGraph()
-
-        Layer.__init__(self, [nNodes])
-
-    def buildGraph(self):
-        activations = self.decodeLayer.activations
-        Layer.buildGraph(self, activations)
-
 
 class Network:
 
@@ -591,12 +332,6 @@ class Network:
     def reshapeLayer(self, newShape, dropout=False):
         self.__addLayerWithScope__(ReshapeLayer, self.outLayer, newShape, dropout)
 
-    def rnnLayer(self, nNodes, dropout=False):
-        self.__addLayerWithScope__(RNN, self.outLayer, nNodes, dropout)
-
-    def gruLayer(self, nNodes, dropout=False):
-        self.__addLayerWithScope__(GRU, self.outLayer, nNodes, dropout)
-
     def basicGRU(self,
         nNodes, nLayers=1, maxSeqLen=10, sequenceLengths=None, batchSize=1, dropout=False,
         initialState=None, saveState=True, activationsAreFinalState=False):
@@ -605,27 +340,6 @@ class Network:
             BasicGRU, self.outLayer, nNodes, nLayers, maxSeqLen, sequenceLengths=sequenceLengths,
             batchSize=batchSize, dropout=dropout, initialState=initialState, saveState=saveState,
             activationsAreFinalState=activationsAreFinalState)
-
-    def dynamicGRU(self,
-        nNodes, nLayers=1, maxSeqLen=10, sequenceLengths=None, batchSize=1, dropout=False,
-        initialState=None, saveState=True, activationsAreFinalState=False):
-
-        self.__addLayerWithScope__(
-            DynamicGRU, self.outLayer, nNodes, nLayers, maxSeqLen, sequenceLengths=sequenceLengths,
-            batchSize=batchSize, dropout=dropout, initialState=initialState, saveState=saveState,
-            activationsAreFinalState=activationsAreFinalState)
-
-    def seq2SeqBasic(self, nNodes, enSeqLen, deSeqLen, wb, feedPrev=False):
-        if self.decodeInLayer is None:
-            raise StandardError("Must define a decodeInLayer for the Seq2Seq model.")
-        self.__addLayerWithScope__(Seq2SeqBasic, self.outLayer, self.decodeInLayer, nNodes,\
-            enSeqLen, deSeqLen, wb, feedPrev)
-
-    def seq2SeqDynamic(self, nNodes, batchSize):
-        if self.decodeInLayer is None:
-            raise StandardError("Must define a decodeInLayer for the Seq2Seq model.")
-        self.__addLayerWithScope__(
-            Seq2SeqDynamic, self.outLayer, self.decodeInLayer, nNodes, batchSize)
 
     def __addLayerWithScope__(self, layerClass, *args, **kwargs):
         with tf.variable_scope(self.scope):
@@ -706,15 +420,9 @@ class Network:
         for layer in self.layers:
             if layer.applyDropout:
                 feedDict[layer.keepProb] = keepProb
-            if isinstance(layer, Seq2SeqBasic):
-                feedDict[layer.enSequenceLengths] = sequenceLengths
-            if isinstance(layer, DynamicGRU) or isinstance(layer, BasicGRU):
+            if isinstance(layer, BasicGRU):
                 if sequenceLengths is not None:
                     feedDict[layer.sequenceLengths] = sequenceLengths
-            if isinstance(layer, Seq2SeqDynamic):
-                feedDict[layer.encodeLayer.sequenceLengths] = sequenceLengths
-                if decoderSequenceLengths is not None:
-                    feedDict[layer.decodeLayer.sequenceLengths] = decoderSequenceLengths
 
         if targets is not None:
             feedDict[self.targets.inputs] = targets
@@ -726,7 +434,7 @@ class Network:
 
     def resetRecurrentHiddens(self, sess):
         for layer in self.layers:
-            if isinstance(layer, RNN) or isinstance(layer, GRU) or isinstance(layer, DynamicGRU):
+            if isinstance(layer, BasicGRU):
                 layer.resetHiddenLayer(sess)
 
 
