@@ -177,12 +177,13 @@ class ReshapeLayer(Layer):
         Layer.buildGraph(self, activations)
 
 
-class BasicGRU(Layer):
+class RNN(Layer):
 
-    def __init__(self, inLayer, nNodes, nLayers, maxSeqLen, sequenceLengths=None, batchSize=1,
+    def __init__(self, inLayer, cell, nNodes, nLayers, maxSeqLen, sequenceLengths=None, batchSize=1,
         dropout=False, initialState=None, saveState=True, activationsAreFinalState=False):
 
         self.inLayer = inLayer
+        self.cell = cell
         self.nNodes = nNodes
         self.nLayers = nLayers
         self.maxSeqLen = maxSeqLen
@@ -194,9 +195,6 @@ class BasicGRU(Layer):
             self.sequenceLengths = tf.placeholder(dtype=tf.int32, name="BasicGRUSeqLen")
         else:
             self.sequenceLengths = sequenceLengths
-
-        # Tensorflow's built in GRU cell
-        self.cell = tf.contrib.rnn.GRUCell(nNodes)
 
         #self.applyDropout = dropout
         if dropout:
@@ -216,7 +214,6 @@ class BasicGRU(Layer):
             if saveState is True:
                 raise ValueError("saveState is not supported with external initialState.")
             self.h = initialState
-
 
         Layer.__init__(self, [nNodes, nNodes], dropout=False)
 
@@ -284,6 +281,26 @@ class BasicGRU(Layer):
             # Stack the time and batch dimensions
             return tf.reshape(outputs, [-1, self.nNodes])
 
+
+class BasicGRU(RNN):
+
+    def __init__(self, inLayer, nNodes, nLayers, maxSeqLen, sequenceLengths=None, batchSize=1,
+        dropout=False, initialState=None, saveState=True, activationsAreFinalState=False):
+
+        # Tensorflow's built in GRU cell
+        self.cell = tf.contrib.rnn.GRUCell(nNodes)
+
+        RNN.__init__(self, inLayer                  = inLayer,
+                           cell                     = self.cell,
+                           nNodes                   = nNodes,
+                           nLayers                  = nLayers,
+                           maxSeqLen                = maxSeqLen,
+                           sequenceLengths          = sequenceLengths,
+                           batchSize                = batchSize,
+                           dropout                  = dropout,
+                           initialState             = initialState,
+                           saveState                = saveState,
+                           activationsAreFinalState = activationsAreFinalState)
 
 class Network:
 
