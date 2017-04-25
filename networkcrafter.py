@@ -196,7 +196,6 @@ class RNN(Layer):
         else:
             self.sequenceLengths = sequenceLengths
 
-        #self.applyDropout = dropout
         if dropout:
             self.keepProb = tf.placeholder(tf.float32, name="keepProb")
             self.cell = tf.contrib.rnn.DropoutWrapper(self.cell, output_keep_prob=self.keepProb)
@@ -207,13 +206,14 @@ class RNN(Layer):
         if initialState is None:
             self.zeroState = self.cell.zero_state(batchSize, tf.float32)
             if nLayers > 1:
-                self.h = tuple([tf.Variable(state, trainable=False) for state in self.zeroState])
+                self.initialState = tuple(
+                    [tf.Variable(state, trainable=False) for state in self.zeroState])
             else:
-                self.h = tf.Variable(self.zeroState, trainable=False)
+                self.initialState = tf.Variable(self.zeroState, trainable=False)
         else:
             if saveState is True:
                 raise ValueError("saveState is not supported with external initialState.")
-            self.h = initialState
+            self.initialState = initialState
 
         Layer.__init__(self, [nNodes, nNodes], dropout=False)
 
@@ -224,13 +224,13 @@ class RNN(Layer):
             tf.reshape(self.inLayer.activations, [self.batchSize, -1, self.inLayer.shape[-1]])
 
         # Create outputs and state graph
-        outputs, self.state = tf.nn.dynamic_rnn(self.cell, self.sequence, \
-            initial_state=self.h, sequence_length=self.sequenceLengths, dtype=tf.float32)
+        outputs, self.finalState = tf.nn.dynamic_rnn(self.cell, self.sequence, \
+            initial_state=self.initialState, sequence_length=self.sequenceLengths, dtype=tf.float32)
         self.outSequence = tf.concat(axis=1, values=outputs)
 
         if self.saveState:
             # Control depency forces the hidden state to persist
-            with tf.control_dependencies([self._assignInitialStateOp(self.state)]):
+            with tf.control_dependencies([self._assignInitialStateOp(self.finalState)]):
                 activations = self._getActivations(self.outSequence)
         else:
             activations = self._getActivations(self.outSequence)
@@ -266,17 +266,17 @@ class RNN(Layer):
             """ Bit of a hack here, returning a useless identy op.
                 The desired assign op is forced by control_dependencies. """
             with tf.control_dependencies(
-                [self.h[i].assign(state) for i, state in enumerate(newState)]):
+                [self.initialState[i].assign(state) for i, state in enumerate(newState)]):
                 return tf.identity(1)
         else:
-            return self.h.assign(newState)
+            return self.initialState.assign(newState)
 
     def _getActivations(self, outputs):
         if self.activationsAreFinalState:
             if self.nLayers > 1:
-                return tf.identity(self.state[-1])
+                return tf.identity(self.finalState[-1])
             else:
-                return tf.identity(self.state)
+                return tf.identity(self.finalState)
         else:
             # Stack the time and batch dimensions
             return tf.reshape(outputs, [-1, self.nNodes])

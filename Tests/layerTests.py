@@ -405,8 +405,8 @@ class TestLayerOutputs(unittest.TestCase):
 
             # These two should be different (the state should be saved from the first run)
             feed = net.getFeedDict(sequence, sequenceLengths=halfSequenceLengths)
-            halfOut1, halfState1 = sess.run([gru.activations, gru.state], feed_dict=feed)
-            halfOut2, halfState2 = sess.run([gru.activations, gru.state], feed_dict=feed)
+            halfOut1, halfState1 = sess.run([gru.activations, gru.finalState], feed_dict=feed)
+            halfOut2, halfState2 = sess.run([gru.activations, gru.finalState], feed_dict=feed)
             self.assertTrue(halfOut1.tolist() != halfOut2.tolist())
             if (gru.nLayers == 1):
                 self.assertTrue(halfState1.tolist() != halfState2.tolist())
@@ -417,7 +417,7 @@ class TestLayerOutputs(unittest.TestCase):
             # The states should be the same as second run above. The outputs should be the
             # same after the zero-d outputs are removed from the end.
             feed = net.getFeedDict(sequence, sequenceLengths=fullSequenceLengths)
-            fullOut, fullSeqState = sess.run([gru.activations, gru.state], feed_dict=feed)
+            fullOut, fullSeqState = sess.run([gru.activations, gru.finalState], feed_dict=feed)
             # Reshape and trim off the ignored outputs
             fullOut = np.reshape(fullOut, [batchSize, maxInLen, nNodes])
             halfOut1 = np.reshape(halfOut1, [batchSize, maxInLen, nNodes])
@@ -463,13 +463,14 @@ class TestLayerOutputs(unittest.TestCase):
 
         def doTests(nLayers):
             out = net.forward(sess, inputs, sequenceLengths=maxInLen)
-            stateOut = stateToList(gru.h, nLayers)
+            stateOut = stateToList(gru.initialState, nLayers)
             gru.resetHiddenLayer(sess)
             # After reset the state should be the zero state
-            self.assertEqual(stateToList(gru.zeroState, nLayers), stateToList(gru.h, nLayers))
+            self.assertEqual(
+                stateToList(gru.zeroState, nLayers), stateToList(gru.initialState, nLayers))
             gru.resetHiddenLayer(sess, stateOut)
             # After resetting to value the state should eval to that value
-            self.assertEqual(stateOut, stateToList(gru.h, nLayers))
+            self.assertEqual(stateOut, stateToList(gru.initialState, nLayers))
 
         tf.reset_default_graph()
         with tf.Session() as sess:
