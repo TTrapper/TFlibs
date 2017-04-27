@@ -179,11 +179,39 @@ class ReshapeLayer(Layer):
 
 class RNN(Layer):
 
-    def __init__(self, inLayer, cell, nNodes, nLayers, maxSeqLen, sequenceLengths=None, batchSize=1,
+    class CellManager(object):
+        def __init__(self, cells, nLayers, batchSize, saveState=True, keepProb=1.0):
+            if keepProb < 1.0
+                self._applyDropout(dropout)
+            
+            if nLayers > 1:
+                self._addLayers(nLayers)
+
+            self._setInitialStates(nLayers, batchSize)
+
+        def _applyDropout(self, keepProb):
+            self.cells = [tf.contrib.rnn.DropoutWrapper(
+                cell, output_keep_prob=keepProb) for cell in self.cells]
+
+        def _addLayers(self, nLayers):
+            self.cells = [tf.contrib.rnn.MultiRNNCell([cell]*nLayers) for cell in self.cells]
+
+        # Initial states stored as list of tuples:
+        #   [cell0:(layer0, layer1, ...), cell1:(layer0, layer1, ...), ...]
+        def _setInitialStates(self, nLayers, batchSize):
+            self.zeroStates = []
+            for cell in self.cells:
+                layerStates = nLayers*[cell.zero_state(batchSize), dtype=tf.float32]
+                self.zeroStates.append(tuple(layerStates))
+            self.initialStates = []
+            for cellStates in self.zeroStates:
+                layerStates = [tf.Variable(layerState, trainable=False) for layerState in cellStates]
+                self.initialStates.append(tuple(layerStates))
+
+    def __init__(self, inLayer, cells, nNodes, nLayers, maxSeqLen, sequenceLengths=None, batchSize=1,
         dropout=False, initialState=None, saveState=True, activationsAreFinalState=False):
 
         self.inLayer = inLayer
-        self.cell = cell
         self.nNodes = nNodes
         self.nLayers = nLayers
         self.maxSeqLen = maxSeqLen
@@ -196,37 +224,17 @@ class RNN(Layer):
         else:
             self.sequenceLengths = sequenceLengths
 
-        if dropout:
-            self.keepProb = tf.placeholder(tf.float32, name="keepProb")
-            self.cell = tf.contrib.rnn.DropoutWrapper(self.cell, output_keep_prob=self.keepProb)
-
-        assert nLayers > 0
-        if nLayers > 1:
-            self.cell = tf.contrib.rnn.MultiRNNCell([self.cell]*nLayers)
-        if initialState is None:
-            self.zeroState = self.cell.zero_state(batchSize, tf.float32)
-            if nLayers > 1:
-                self.initialState = tuple(
-                    [tf.Variable(state, trainable=False) for state in self.zeroState])
-            else:
-                self.initialState = tf.Variable(self.zeroState, trainable=False)
-        else:
-            if saveState is True:
-                raise ValueError("saveState is not supported with external initialState.")
-            self.initialState = initialState
+        self.cellManager = CellManager(cells, self.nLayers, self.saveState, self.dropout)
 
         Layer.__init__(self, [nNodes, nNodes], dropout=False)
 
     def buildGraph(self):
 
         # Assumption that data has rank-2 on the way in, reshape to get a batch of sequences
-        self.sequence = \
+        sequence = \
             tf.reshape(self.inLayer.activations, [self.batchSize, -1, self.inLayer.shape[-1]])
 
-        # Create outputs and state graph
-        outputs, self.finalState = tf.nn.dynamic_rnn(self.cell, self.sequence, \
-            initial_state=self.initialState, sequence_length=self.sequenceLengths, dtype=tf.float32)
-        self.outSequence = tf.concat(axis=1, values=outputs)
+        self.outSequence, self.finalStates = self._unroller(sequence)
 
         if self.saveState:
             # Control depency forces the hidden state to persist
@@ -301,6 +309,27 @@ class BasicGRU(RNN):
                            initialState             = initialState,
                            saveState                = saveState,
                            activationsAreFinalState = activationsAreFinalState)
+
+    def _unroller(self, sequences):
+        cell = self.cellManager.cells[0]
+        initialState = self.cellManager.initialStates[0]
+        
+
+        # Create outputs and state graph
+        outputs, finalState = tf.nn.dynamic_rnn(cell, sequences,
+            initial_state=initialState, sequence_length=self.sequenceLengths, dtype=tf.float32)
+        outSequence = tf.concat(axis=1, values=outputs)
+        
+        return outSequence, finalState
+
+class BidirectionalGRU(RNN):
+
+    def __init__(self, inLayer, nNodes, nLayers, maxSeqLen, sequenceLengths=None, batchSize=1,
+        dropout=False, initialState=None, saveState=True, activationsAreFinalState=False):
+
+
+
+        pass
 
 class Network:
 
