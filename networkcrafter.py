@@ -226,11 +226,11 @@ class RNN(Layer):
     # Initial states stored as list of tuples:
     #   [cell0:(layer0, layer1, ...), cell1:(layer0, layer1, ...), ...]
     def _createInitialStates(self, cells):
-
         self.zeroStates = []
         for cell in cells:
-            layerStates = self.nLayers*[cell.zero_state(self.batchSize, dtype=tf.float32)]
-            self.zeroStates.append(tuple(layerStates))
+            layerStates = cell.zero_state(self.batchSize, dtype=tf.float32)
+            layerStates = layerStates if type(layerStates) is tuple else tuple([layerStates])
+            self.zeroStates.append(layerStates)
         self.initialStates = []
         for cellStates in self.zeroStates:
             layerStates = [tf.Variable(layerState, trainable=False) for layerState in cellStates]
@@ -238,11 +238,11 @@ class RNN(Layer):
 
     # Sets up ops for resetting the initial state to zero or placeholder values
     def _createInitialStateResetOps(self, initialStates):
-        self._setZeroState = self._assignInitialStateOp(self.zeroState)
-        self.newStates = []
+        self._setZeroState = self._assignInitialStateOp(self.zeroStates)
+        newStates = []
         for cellState in initialStates:
-             self.newStates.append([tf.placeholder(tf.float32) for layer in cellState])
-        self.setNewState = self._assignInitialStateOp(self.newState)
+             newStates.append([tf.placeholder(tf.float32) for layer in cellState])
+        self._setNewStates = self._assignInitialStateOp(newStates)
 
     # Returns an op assigning new tensors to the intial state variables
     # Takes a list of tuples, each tuple representing the layers for each cell
@@ -254,9 +254,9 @@ class RNN(Layer):
         for oldCell, newCell in zip(oldStates, newStates):
             assert len(oldCell) == len(newCell)
             ops = [oldLayer.assign(newLayer) for oldLayer, newLayer in zip(oldCell, newCell)]
-            appsignOps.extend(ops)
+            assignOps.extend(ops)
 
-        return tf.group(*assigngOps, name='assignNewStates')
+        return tf.group(*assignOps, name='assignNewStates')
 
     # Outputs is an iterable, one tensor per cell
     def _getActivations(self, outputs, finalStates):
@@ -265,7 +265,7 @@ class RNN(Layer):
             states = [cellStates[lastLayerIdx] for cellStates in finalStates]
             return tf.concat(states, axis=1)
         else:
-            # Concatenate the cell outputs together
+            # Concatenate the cells' outputs together
             outputs = tf.concat(outputs, axis=2)
             # Stack the time and batch dimensions
             return tf.reshape(outputs, [-1, self.nNodes])
@@ -278,29 +278,36 @@ class RNN(Layer):
         # Assumption that data has rank-2 on the way in, reshape to get a batch of sequences
         sequence = \
             tf.reshape(self.inLayer.activations, [self.batchSize, -1, self.inLayer.shape[-1]])
-
         outSequence, finalStates = self._unroller(sequence)
 
         if self.saveState:
             # Control depency forces the hidden state to persist
-            with tf.control_dependencies([self._assignInitialStateOp(self.finalStates)]):
+            with tf.control_dependencies([self._assignInitialStateOp(finalStates)]):
                 activations = self._getActivations(outSequence, finalStates)
         else:
             activations = self._getActivations(outSequence, finalStates)
 
+
+        self.outSequence = outSequence
+        self.finalStates = finalStates
         Layer.buildGraph(self, activations)
 
-    def resetHiddenLayer(self, sess, newState=None):
-        if newState is None:
+    # Turn list of lists or list of tuples into a flat list
+    def _flattenStates(self, states):
+        flatStates = []
+        for cell in states:
+            flatStates.extend([layerState for layerState in cell])
+        return flatStates
+
+    def resetHiddenLayer(self, sess, newStates=None):
+        if newStates is None:
             sess.run(self._setZeroState)
         else:
-            if self.nLayers == 1:
-                feedDict = {self.newState:newState}
-            else:
-                feedDict = {}
-                for i in range(self.nLayers):
-                    feedDict.update({self.newState[i]: newState[i]})
-            sess.run(self.setNewState, feed_dict=feedDict)
+            newStates = self._flattenStates(newState)
+            feedDict = {}
+            for i in range(self._numCells * self.nLayers):
+                feedDict.update({self.newState[i]: newStates[i]})
+            sess.run(self._setNewStates, feed_dict=feedDict)
 
 
 class BasicGRU(RNN):
@@ -325,15 +332,16 @@ class BasicGRU(RNN):
 
     def _unroller(self, sequences):
         cell = self.cells[0]
-        initialState = self.initialStates[0]
-        sequenceLengths = self.sequenceLengths
 
+        initialState = self.initialStates[0] if self.nLayers > 1 else self.initialStates[0][0]
+        sequenceLengths = self.sequenceLengths
         # Create outputs and state graph
         outputs, finalState = tf.nn.dynamic_rnn(cell, sequences,
             initial_state=initialState, sequence_length=sequenceLengths, dtype=tf.float32)
-        outSequence = tf.concat(axis=1, values=outputs)
+        # RNN expects a list of outputs for each cell, and a list of tuples for the states
+        finalState = [finalState] if type(finalState) is tuple else [tuple([finalState])]
 
-        return outSequence, finalState
+        return [outputs], finalState
 
 class BidirectionalGRU(RNN):
 
