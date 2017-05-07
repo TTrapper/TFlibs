@@ -353,7 +353,8 @@ class TestLayerOutputs(unittest.TestCase):
         def getNetwork(nLayers, scopeName):
             net = nc.Network(scopeName)
             net.inputLayer(nIn, applyOneHot=True)
-            net.basicGRU(nNodes, nLayers=nLayers,  maxSeqLen=maxInLen, saveState=False, activationsAreFinalState=True)
+            net.basicGRU(nNodes, nLayers=nLayers,  maxSeqLen=maxInLen, saveState=False,
+                activationsAreFinalState=True)
             net.buildGraph()
             gru = net.outLayer
             return net, gru
@@ -363,14 +364,14 @@ class TestLayerOutputs(unittest.TestCase):
             sess.run(tf.global_variables_initializer())
 
             feed = net.getFeedDict(inputs, sequenceLengths=inLength)
-            finalState, outSequence = sess.run([net.outputs, gru.activations[-1,:]], feed)
+            finalState, outSequence = sess.run([net.outputs, gru.outSequence[0]], feed)
 
-            print gru.activations
             # Timestep reshaped to dim-0
             outSequence = np.reshape(outSequence, [-1, nNodes])
+            lastOut = outSequence[inLength-1]
 
             # network output is the final state which is the output at time inLength
-            self.assertTrue(outSequence.tolist() == finalState[0].tolist())
+            self.assertTrue(lastOut.tolist() == finalState[0].tolist())
 
         tf.reset_default_graph()
         with tf.Session() as sess:
@@ -423,15 +424,13 @@ class TestLayerOutputs(unittest.TestCase):
             fullOut, fullSeqState = sess.run([gru.activations, gru.finalStates], feed_dict=feed)
             # Reshape and trim off the ignored outputs
             fullOut = np.reshape(fullOut, [batchSize, maxInLen, nNodes])
-            halfOut1 = np.reshape(halfOut1, [batchSize, maxInLen, nNodes])
-            halfOut2 = np.reshape(halfOut2, [batchSize, maxInLen, nNodes])
             halfOut1 = np.reshape(halfOut1, [batchSize, maxInLen, nNodes])[:,:maxInLen/2,:]
             halfOut2 = np.reshape(halfOut2, [batchSize, maxInLen, nNodes])[:,:maxInLen/2,:]
             outconcat =  np.concatenate([halfOut1, halfOut2], axis=1)
             self.assertTrue(fullOut.tolist() == outconcat.tolist())
             for cellState1, cellState2 in  zip(fullSeqState, halfState2):
                 for layerState1, layerState2 in zip(cellState1, cellState2):
-                    self.assertTrue(layerState1.tolist() != layerState2.tolist())
+                    self.assertTrue(layerState1.tolist() == layerState2.tolist())
 
         tf.reset_default_graph()
         with tf.Session() as sess:
