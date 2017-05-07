@@ -486,6 +486,44 @@ class TestLayerOutputs(unittest.TestCase):
             net, gru = getNetwork(nLayers, scopeName="multiLayer")
             doTests(nLayers=3)
 
+    def test_GRUBasic_dropout(self):
+
+        nNodes = 6
+        nIn = 3
+        maxInLen = 9
+        batchSize = 2
+
+        def getNetwork(nLayers, keepProb, scopeName):
+            net = nc.Network(scopeName)
+            net.inputLayer(nIn)
+            net.basicGRU(nNodes, keepProb= keepProb, nLayers=nLayers, maxSeqLen=maxInLen,
+                batchSize=batchSize)
+            net.buildGraph()
+            gru = net.outLayer
+
+            sess.run(tf.global_variables_initializer())
+            return net, gru
+
+        def doTests():
+            outNoDrop = netNoDrop.forward(sess, inputs, sequenceLengths=maxInLen)
+            outDrop = netDrop.forward(sess, inputs, sequenceLengths=maxInLen)
+            # Very basic test to at least make sure that dropout changes the output values
+            self.assertTrue(outNoDrop.tolist() != outDrop.tolist())
+
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+            inputs = np.random.rand(maxInLen*batchSize, nIn)
+
+            # Single Layer
+            netNoDrop, gruNoDrop = getNetwork(nLayers=1, keepProb=1.0, scopeName="oneLayerNoDrop")
+            netDrop, gruDrop = getNetwork(nLayers=1, keepProb=0.5, scopeName="oneLayerDrop")
+            doTests()
+
+            # Multi-Layer
+            nLayers = 3
+            netNoDrop, gruNoDrop = getNetwork(nLayers, keepProb=1.0, scopeName="multiLayerNoDrop")
+            netDrop, gruDrop = getNetwork(nLayers, keepProb=0.5, scopeName="multiLayerDrop")
+            doTests()
 
     def test_concatLayer(self):
         tf.reset_default_graph()
