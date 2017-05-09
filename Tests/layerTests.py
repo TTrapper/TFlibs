@@ -497,8 +497,8 @@ class TestLayerOutputs(unittest.TestCase):
         maxInLen = 9
         batchSize = 2
 
-        def getNetwork(nLayers, keepProb, scopeName):
-            net = nc.Network(scopeName)
+        def getNetwork(nLayers, keepProb, reuse, scopeName):
+            net = nc.Network(scopeName, reuse)
             net.inputLayer(nIn)
             net.basicGRU(nNodes, keepProb= keepProb, nLayers=nLayers, maxSeqLen=maxInLen,
                 batchSize=batchSize, saveState=False) # Saving state defeats the purpose
@@ -509,7 +509,7 @@ class TestLayerOutputs(unittest.TestCase):
             return net, gru
 
         def doTests():
-            outNoDrop = netNoDrop.forward(sess, inputs, sequenceLengths=maxInLen)
+            outNoDrop = net.forward(sess, inputs, sequenceLengths=maxInLen)
             outDrop = netDrop.forward(sess, inputs, sequenceLengths=maxInLen)
             # Very basic test to at least make sure that dropout changes the output values
             self.assertTrue(outNoDrop.tolist() != outDrop.tolist())
@@ -519,14 +519,15 @@ class TestLayerOutputs(unittest.TestCase):
             inputs = np.random.rand(maxInLen*batchSize, nIn)
 
             # Single Layer
-            netNoDrop, gruNoDrop = getNetwork(nLayers=1, keepProb=1.0, scopeName="oneLayerNoDrop")
-            netDrop, gruDrop = getNetwork(nLayers=1, keepProb=0.5, scopeName="oneLayerDrop")
+            nLayers = 1
+            net, gru = getNetwork(nLayers=1, keepProb=1.0, reuse=False, scopeName="oneLayer")
+            netDrop, gruDrop = getNetwork(nLayers, keepProb=0.5, reuse=True, scopeName="oneLayer")
             doTests()
 
             # Multi-Layer
             nLayers = 3
-            netNoDrop, gruNoDrop = getNetwork(nLayers, keepProb=1.0, scopeName="multiLayerNoDrop")
-            netDrop, gruDrop = getNetwork(nLayers, keepProb=0.5, scopeName="multiLayerDrop")
+            net, gru = getNetwork(nLayers, keepProb=1.0, reuse=False, scopeName="multiLayer")
+            netDrop, gruDrop = getNetwork(nLayers, keepProb=0.5, reuse=True, scopeName="multiLayer")
             doTests()
 
     def test_concatLayer(self):
