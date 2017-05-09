@@ -311,13 +311,6 @@ class RNN(Layer):
                 feedDict.update({newStatePlaces[i]: newStates[i]})
             sess.run(self._setNewStates, feed_dict=feedDict)
 
-    def evalInitialStates(self, sess):
-        evaluatedStates = []
-        for cell in self.initialStates:
-            evaluatedStates.append(tuple([layer.eval() for layer in cell]))
-        return evaluatedStates
-
-
 class BasicGRU(RNN):
 
     def __init__(self, inLayer, nNodes, nLayers, maxSeqLen, sequenceLengths=None, batchSize=1,

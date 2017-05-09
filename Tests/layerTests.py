@@ -458,22 +458,24 @@ class TestLayerOutputs(unittest.TestCase):
             sess.run(tf.global_variables_initializer())
             return net, gru
 
-        def stateToList(states):
+        def stateToList(states, evaluate=True):
             statesList = []
             for cell in states:
-                statesList.extend([layer.eval().tolist() for layer in cell])
+                if evaluate:
+                    statesList.extend([layer.eval().tolist() for layer in cell])
+                else:
+                    statesList.extend([layer.tolist() for layer in cell])
             return statesList
 
         def doTests(nLayers):
             out = net.forward(sess, inputs, sequenceLengths=maxInLen)
-            stateFinal = gru.evalInitialStates(sess) # List of tuples of arrays
-            stateFinalList = stateToList(gru.initialStates) # Nested lists of nums
+            stateFinal = sess.run(gru.initialStates)
             gru.resetHiddenLayer(sess)
             # After reset the state should be the zero state
             self.assertEqual(stateToList(gru.zeroStates), stateToList(gru.initialStates))
             gru.resetHiddenLayer(sess, stateFinal)
             # After resetting to value the state should eval to that value
-            self.assertEqual(stateFinalList, stateToList(gru.initialStates))
+            self.assertEqual(stateToList(stateFinal, evaluate=False), stateToList(gru.initialStates))
 
         tf.reset_default_graph()
         with tf.Session() as sess:
