@@ -242,7 +242,8 @@ class RNN(Layer):
         newStates = []
         for cellState in initialStates:
              newStates.append([tf.placeholder(tf.float32) for layer in cellState])
-        self._setNewStates = self._assignInitialStateOp(newStates)
+        self._newStatePlaces = newStates
+        self._setNewStates = self._assignInitialStateOp(self._newStatePlaces)
 
     # Returns an op assigning new tensors to the intial state variables
     # Takes a list of tuples, each tuple representing the layers for each cell
@@ -303,11 +304,18 @@ class RNN(Layer):
         if newStates is None:
             sess.run(self._setZeroState)
         else:
-            newStates = self._flattenStates(newState)
+            newStates = self._flattenStates(newStates)
+            newStatePlaces = self._flattenStates(self._newStatePlaces)
             feedDict = {}
             for i in range(self._numCells * self.nLayers):
-                feedDict.update({self.newState[i]: newStates[i]})
+                feedDict.update({newStatePlaces[i]: newStates[i]})
             sess.run(self._setNewStates, feed_dict=feedDict)
+
+    def evalInitialStates(self, sess):
+        evaluatedStates = []
+        for cell in self.initialStates:
+            evaluatedStates.append(tuple([layer.eval() for layer in cell]))
+        return evaluatedStates
 
 
 class BasicGRU(RNN):
