@@ -501,7 +501,7 @@ class TestLayerOutputs(unittest.TestCase):
             net = nc.Network(scopeName)
             net.inputLayer(nIn)
             net.basicGRU(nNodes, keepProb= keepProb, nLayers=nLayers, maxSeqLen=maxInLen,
-                batchSize=batchSize, saveState=True)
+                batchSize=batchSize, saveState=False) # Saving state defeats the purpose
             net.buildGraph()
             gru = net.outLayer
 
