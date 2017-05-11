@@ -198,7 +198,7 @@ class RNN(Layer):
         self.saveState = saveState
         self.activationsAreFinalState = activationsAreFinalState
         if sequenceLengths is None:
-            self.sequenceLengths = tf.placeholder(dtype=tf.int32, name="BasicGRUSeqLen")
+            self.sequenceLengths = tf.placeholder(dtype=tf.int32, name="RNNSeqLen")
         else:
             self.sequenceLengths = sequenceLengths
 
@@ -221,7 +221,7 @@ class RNN(Layer):
     def _maybeDropoutCell(self):
         keepProb = self.keepProb
         cell = self._createCell()
-        return cell if keepProb == 1.0 else tf.contrib.rnn.DropoutWrapper(cell, keepProb)
+        return tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=keepProb)
 
     # Initial states stored as list of tuples:
     #   [cell0:(layer0, layer1, ...), cell1:(layer0, layer1, ...), ...]
