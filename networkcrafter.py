@@ -198,7 +198,7 @@ class RNN(Layer):
         self.saveState = saveState
         self.activationsAreFinalState = activationsAreFinalState
         if sequenceLengths is None:
-            self.sequenceLengths = tf.placeholder(dtype=tf.int32, name="BasicGRUSeqLen")
+            self.sequenceLengths = tf.placeholder(dtype=tf.int32, name="RNNSeqLen")
         else:
             self.sequenceLengths = sequenceLengths
 
@@ -269,7 +269,7 @@ class RNN(Layer):
             # Concatenate the cells' outputs together
             outputs = tf.concat(outputs, axis=2)
             # Stack the time and batch dimensions
-            return tf.reshape(outputs, [-1, self.nNodes])
+            return tf.reshape(outputs, [-1, self.nNodes*self._numCells])
 
     def buildGraph(self):
         self._createCells()
@@ -334,24 +334,64 @@ class BasicGRU(RNN):
     def _unroller(self, sequences):
         cell = self.cells[0]
 
+        # TF expects a tuple if multilayer and a tensor if single layer
         initialState = self.initialStates[0] if self.nLayers > 1 else self.initialStates[0][0]
-        sequenceLengths = self.sequenceLengths
         # Create outputs and state graph
-        outputs, finalState = tf.nn.dynamic_rnn(cell, sequences,
-            initial_state=initialState, sequence_length=sequenceLengths, dtype=tf.float32)
+        outputs, finalState = tf.nn.dynamic_rnn(cell,
+                                                sequences,
+                                                initial_state=initialState,
+                                                sequence_length=self.sequenceLengths,
+                                                dtype=tf.float32)
+
         # RNN expects a list of outputs for each cell, and a list of tuples for the states
-        finalState = [finalState] if type(finalState) is tuple else [tuple([finalState])]
+        finalState = [finalState] if self.nLayers > 1 else [tuple([finalState])]
 
         return [outputs], finalState
 
 class BidirectionalGRU(RNN):
 
     def __init__(self, inLayer, nNodes, nLayers, maxSeqLen, sequenceLengths=None, batchSize=1,
-        dropout=False, initialState=None, saveState=True, activationsAreFinalState=False):
+        keepProb=1.0, saveState=True, activationsAreFinalState=False):
 
+        # Two cells. One reads forward, the other backward.
+        self._numCells = 2
 
+        RNN.__init__(self, inLayer                  = inLayer,
+                           nNodes                   = nNodes,
+                           nLayers                  = nLayers,
+                           maxSeqLen                = maxSeqLen,
+                           sequenceLengths          = sequenceLengths,
+                           batchSize                = batchSize,
+                           keepProb                 = keepProb,
+                           saveState                = saveState,
+                           activationsAreFinalState = activationsAreFinalState)
 
-        pass
+    def _createCell(self):
+        return tf.contrib.rnn.GRUCell(self.nNodes)
+
+    def _unroller(self, sequences):
+        forwardCell = self.cells[0]
+        backwardCell = self.cells[1]
+
+        # TF expects a tuple if multilayer and a tensor if single layer
+        fwInitialState = self.initialStates[0] if self.nLayers > 1 else self.initialStates[0][0]
+        bwInitialState = self.initialStates[1] if self.nLayers > 1 else self.initialStates[1][0]
+
+        outputs, finalStates = tf.nn.bidirectional_dynamic_rnn(forwardCell,
+                                                               backwardCell,
+                                                               sequences,
+                                                               sequence_length=self.sequenceLengths,
+                                                               initial_state_fw=fwInitialState,
+                                                               initial_state_bw=bwInitialState,
+                                                               dtype=tf.float32)
+
+        # RNN expects a list containing a tuple for each cell's state
+        if self.nLayers == 1:
+            finalStates = [tuple([finalStates[0]]), tuple([finalStates[1]])]
+        else:
+            finalStates = list(finalStates)
+
+        return list(outputs), finalStates
 
 class Network:
 
@@ -399,6 +439,14 @@ class Network:
 
     def reshapeLayer(self, newShape, dropout=False):
         self.__addLayerWithScope__(ReshapeLayer, self.outLayer, newShape, dropout)
+
+    def bidirectionalGRU(self, nNodes, nLayers=1, maxSeqLen=10, sequenceLengths=None, batchSize=1,
+        keepProb=1.0, saveState=True, activationsAreFinalState=False):
+
+        self.__addLayerWithScope__(
+            BidirectionalGRU, self.outLayer, nNodes, nLayers, maxSeqLen, sequenceLengths=sequenceLengths,
+            batchSize=batchSize, keepProb=keepProb, saveState=saveState,
+            activationsAreFinalState=activationsAreFinalState)
 
     def basicGRU(self, nNodes, nLayers=1, maxSeqLen=10, sequenceLengths=None, batchSize=1,
         keepProb=1.0, saveState=True, activationsAreFinalState=False):
@@ -465,7 +513,6 @@ class Network:
         if batchSize > 1:
             output = tf.reshape(output, [batchSize, -1, self.outLayer.shape[-1]])
 
-
         return sess.run(output, feed_dict=feedDict)
 
 
@@ -486,8 +533,9 @@ class Network:
         # Add keepProb to layers with dropout. Add sequence info to recurrent layers.
         for layer in self.layers:
             if layer.applyDropout:
+
                 feedDict[layer.keepProb] = keepProb
-            if isinstance(layer, BasicGRU):
+            if isinstance(layer, RNN):
                 if sequenceLengths is not None:
                     feedDict[layer.sequenceLengths] = sequenceLengths
 
