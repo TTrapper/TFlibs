@@ -73,7 +73,8 @@ class TestLayerGraphBuild(unittest.TestCase):
             outputs = sess.run(layer.activations, feed_dict={layer.keepProb:0.5})
             numKept = np.sum(np.where(outputs == 0, 0, 1))
             numExpected =  (shape[0]*shape[1])*0.5
-            self.assertTrue(abs(numKept-numExpected) < 100)
+            # Dropout removed 45% to 55% of the nodes.
+            self.assertTrue(abs(numKept-numExpected) < 500)
 
 
 class TestLayerOutputs(unittest.TestCase):
@@ -322,7 +323,7 @@ class TestLayerOutputs(unittest.TestCase):
         def getNetwork(sequenceLengths, reuse):
             net = nc.Network(reuseVariables=reuse)
             net.inputLayer(nNodes)
-            net.basicGRU(nNodes=nNodes, batchSize=batchSize, maxSeqLen=maxSeqLen,
+            net.bidirectionalGRU(nNodes=nNodes, batchSize=batchSize, maxSeqLen=maxSeqLen,
                 sequenceLengths=sequenceLengths, saveState=False)
             net.buildGraph()
             return net
@@ -353,7 +354,7 @@ class TestLayerOutputs(unittest.TestCase):
         def getNetwork(nLayers, scopeName):
             net = nc.Network(scopeName)
             net.inputLayer(nIn, applyOneHot=True)
-            net.basicGRU(nNodes, nLayers=nLayers,  maxSeqLen=maxInLen, saveState=False,
+            net.bidirectionalGRU(nNodes, nLayers=nLayers,  maxSeqLen=maxInLen, saveState=False,
                 activationsAreFinalState=True)
             net.buildGraph()
             gru = net.outLayer
@@ -363,15 +364,26 @@ class TestLayerOutputs(unittest.TestCase):
 
             sess.run(tf.global_variables_initializer())
 
-            feed = net.getFeedDict(inputs, sequenceLengths=inLength)
-            finalState, outSequence = sess.run([net.outputs, gru.outSequence[0]], feed)
+            feed = net.getFeedDict(inputs, sequenceLengths=[inLength])
+            finalState, outSequence = sess.run([net.outputs, gru.outSequence], feed)
+
+            # Trim off the zeros
+            outSequence = [seq[:,:inLength,:] for seq in outSequence]
+
+            # BidirectionalRNN has 2 output sequences: forward and back
+            numOutputCells = len(outSequence)
+            # The second one is backwards, so the final state should be the output at index 0
+            if numOutputCells == 2:
+                outSequence[1] = np.flip(outSequence[1], axis=1)
+            # Stich them together
+            outSequence = np.concatenate(outSequence, axis=2)
 
             # Timestep reshaped to dim-0
-            outSequence = np.reshape(outSequence, [-1, nNodes])
+            outSequence = np.reshape(outSequence, [-1, numOutputCells*nNodes])
             lastOut = outSequence[inLength-1]
 
             # network output is the final state which is the output at time inLength
-            self.assertTrue(lastOut.tolist() == finalState[0].tolist())
+            self.assertEqual(lastOut.tolist(),  finalState[0].tolist())
 
         tf.reset_default_graph()
         with tf.Session() as sess:
