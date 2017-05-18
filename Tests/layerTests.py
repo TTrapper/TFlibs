@@ -315,26 +315,25 @@ class TestLayerOutputs(unittest.TestCase):
 
             self.assertTrue(maxDiff >= difference)
 
-    def test_GRUBasic_seqLenTensor(self):
+    def test_GRU_seqLenTensor(self):
         nNodes = 7
         maxSeqLen = 10
         batchSize = 3
+        seqLens = [2, 10, 4]
 
-        def getNetwork(sequenceLengths, reuse):
+        def getNetwork(sequenceLengths, reuse, bidirectional=False):
             net = nc.Network(reuseVariables=reuse)
             net.inputLayer(nNodes)
-            net.bidirectionalGRU(nNodes=nNodes, batchSize=batchSize, maxSeqLen=maxSeqLen,
-                sequenceLengths=sequenceLengths, saveState=False)
+            if bidirectional:
+                net.bidirectionalGRU(nNodes=nNodes, batchSize=batchSize, maxSeqLen=maxSeqLen,
+                    sequenceLengths=sequenceLengths, saveState=False)
+            else:
+                net.basicGRU(nNodes=nNodes, batchSize=batchSize, maxSeqLen=maxSeqLen,
+                    sequenceLengths=sequenceLengths, saveState=False)
             net.buildGraph()
             return net
 
-        tf.reset_default_graph()
-        with tf.Session() as sess:
-            seqLens = [2, 10, 4]
-            netSeqLenIn = getNetwork(seqLens, False)
-
-            netSeqLenPlace = getNetwork(None, True)
-
+        def doTests(netSeqLenIn, netSeqLenPlace):
             sess.run(tf.global_variables_initializer())
 
             ins = np.random.rand(batchSize*maxSeqLen, nNodes)
@@ -342,6 +341,22 @@ class TestLayerOutputs(unittest.TestCase):
             outSeqLenPlace = netSeqLenPlace.forward(sess, ins, sequenceLengths=seqLens)
             # Same result when seq lens are given as placeholder or defined on layer init
             self.assertEquals(outSeqLenIn.tolist(), outSeqLenPlace.tolist())
+
+        # Basic GRU
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+
+            netSeqLenIn = getNetwork(seqLens, False)
+            netSeqLenPlace = getNetwork(None, True)
+            doTests(netSeqLenIn, netSeqLenPlace)
+
+        # Bidirectional GRU
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+
+            netSeqLenIn = getNetwork(seqLens, False, bidirectional=True)
+            netSeqLenPlace = getNetwork(None, True, bidirectional=True)
+            doTests(netSeqLenIn, netSeqLenPlace)
 
     def test_GRUBasic_stateOut(self):
 
@@ -351,11 +366,15 @@ class TestLayerOutputs(unittest.TestCase):
         inputs = [1]*maxInLen
         inLength = 5
 
-        def getNetwork(nLayers, scopeName):
+        def getNetwork(nLayers, scopeName, bidirectional=False):
             net = nc.Network(scopeName)
             net.inputLayer(nIn, applyOneHot=True)
-            net.bidirectionalGRU(nNodes, nLayers=nLayers,  maxSeqLen=maxInLen, saveState=False,
-                activationsAreFinalState=True)
+            if bidirectional:
+                net.bidirectionalGRU(nNodes, nLayers=nLayers,  maxSeqLen=maxInLen, saveState=False,
+                    activationsAreFinalState=True)
+            else:
+                net.basicGRU(nNodes, nLayers=nLayers,  maxSeqLen=maxInLen, saveState=False,
+                    activationsAreFinalState=True)
             net.buildGraph()
             gru = net.outLayer
             return net, gru
@@ -387,11 +406,18 @@ class TestLayerOutputs(unittest.TestCase):
 
         tf.reset_default_graph()
         with tf.Session() as sess:
-
+            # Basic GRU
             net, gru = getNetwork(1, "singleLayer")
             doTests()
 
             net, gru = getNetwork(2, "multiLayer")
+            doTests()
+
+            # Bidirectional GRU
+            net, gru = getNetwork(1, "singleLayerBi", bidirectional=True)
+            doTests()
+
+            net, gru = getNetwork(2, "multiLayerBi", bidirectional=True)
             doTests()
 
     def test_GRUBasic_stateSave(self):
@@ -457,13 +483,18 @@ class TestLayerOutputs(unittest.TestCase):
 
         nNodes = 1
         nIn = 3
-        maxInLen = 4 # This best be even
+        maxInLen = 4
         batchSize = 2
 
-        def getNetwork(nLayers, scopeName):
+        def getNetwork(nLayers, scopeName, bidirectional=False):
             net = nc.Network(scopeName)
             net.inputLayer(nIn)
-            net.basicGRU(nNodes, nLayers=nLayers, maxSeqLen=maxInLen, batchSize=batchSize, saveState=True)
+            if bidirectional:
+                net.bidirectionalGRU(nNodes, nLayers=nLayers, maxSeqLen=maxInLen,
+                    batchSize=batchSize, saveState=False)
+            else:
+                net.basicGRU(nNodes, nLayers=nLayers, maxSeqLen=maxInLen, batchSize=batchSize,
+                    saveState=True)
             net.buildGraph()
             gru = net.outLayer
 
@@ -480,7 +511,7 @@ class TestLayerOutputs(unittest.TestCase):
             return statesList
 
         def doTests(nLayers):
-            out = net.forward(sess, inputs, sequenceLengths=maxInLen)
+            out = net.forward(sess, inputs, sequenceLengths=batchSize*[maxInLen])
             stateFinal = sess.run(gru.initialStates)
             gru.resetHiddenLayer(sess)
             # After reset the state should be the zero state
@@ -500,6 +531,16 @@ class TestLayerOutputs(unittest.TestCase):
             # Multi-Layer
             nLayers = 3
             net, gru = getNetwork(nLayers, scopeName="multiLayer")
+            doTests(nLayers=3)
+
+
+            # Single Layer Bidirectional
+            net, gru = getNetwork(nLayers=1, scopeName="singleLayerBi", bidirectional=True)
+            doTests(nLayers=1)
+
+            # Multi-Layer Bidirectional
+            nLayers = 3
+            net, gru = getNetwork(nLayers, scopeName="multiLayerBi", bidirectional=True)
             doTests(nLayers=3)
 
     def test_GRUBasic_dropout(self):
