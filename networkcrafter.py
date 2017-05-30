@@ -208,8 +208,17 @@ class RNN(Layer):
         # A list of cells, each with possibly multiple layers, each possibly with dropout
         cells = []
         for _ in range(self._numCells):
-            cells.append([self._maybeDropoutCell() for layer in range(self.nLayers)])
-        self.cells = self._consolodateLayers(cells)
+            cells.append([self._createCell() for layer in range(self.nLayers)])
+
+        inShapes = [self.inLayer.activations.shape]
+        inShapes.extend([tf.ones(shape=[self.nNodes]).shape for _ in range(self.nLayers-1)])
+
+        droppedOut = []
+        for cell in cells:
+            droppedOut.append(
+                [self._maybeDropoutCell(layer, shape) for layer, shape in zip(cell, inShapes)])
+
+        self.cells = self._consolodateLayers(droppedOut)
 
     def _consolodateLayers(self, cellsAsLayerLists):
         if self.nLayers > 1:
@@ -218,10 +227,10 @@ class RNN(Layer):
             cells = [cell[0] for cell in cellsAsLayerLists]
         return cells
 
-    def _maybeDropoutCell(self):
+    def _maybeDropoutCell(self, cell, inShape):
         keepProb = self.keepProb
-        cell = self._createCell()
-        return tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=keepProb)
+        return tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=keepProb,
+            variational_recurrent=True, input_size=inShape[-1], dtype=tf.float32)
 
     # Initial states stored as list of tuples:
     #   [cell0:(layer0, layer1, ...), cell1:(layer0, layer1, ...), ...]
