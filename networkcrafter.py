@@ -180,15 +180,18 @@ class ReshapeLayer(Layer):
 class RNN(Layer):
 
     def __init__(self, inLayer, nNodes, nLayers, maxSeqLen, sequenceLengths=None, batchSize=1,
-        keepProb=1.0, saveState=True, activationsAreFinalState=False):
+        keepProb=1.0, saveState=True, activationsAreFinalState=False, initialStateTensor=None):
 
         assert 0.0 <= keepProb and keepProb <= 1.0
         assert nLayers > 0
         assert nNodes > 0
         assert maxSeqLen > 0
+        # Can't save initial state if it is provided as a tensor
+        assert not (saveState and initialStateTensor is not None)
 
         self.cells = None
-        self.initialStates = None
+        self.initialStates = None # List of tuples: states for each cell layer passed to unroller
+        self.initialStateTensor = initialStateTensor # An external initial value for one cell state
         self.inLayer = inLayer
         self.nNodes = nNodes
         self.nLayers = nLayers
@@ -201,8 +204,6 @@ class RNN(Layer):
             self.sequenceLengths = tf.placeholder(dtype=tf.int32, name="RNNSeqLen")
         else:
             self.sequenceLengths = sequenceLengths
-
-        Layer.__init__(self, [nNodes, nNodes], dropout=False)
 
     def _createCells(self):
         # A list of cells, each with possibly multiple layers, each possibly with dropout
@@ -225,7 +226,14 @@ class RNN(Layer):
 
     # Initial states stored as list of tuples:
     #   [cell0:(layer0, layer1, ...), cell1:(layer0, layer1, ...), ...]
-    def _createInitialStates(self, cells):
+    def _createInitialStates(self):
+        if self.initialStateTensor is None:
+            self._createInitialStatesFromZero(self.cells)
+        else:
+            self._createInitialStatesFromTensor(self.initialStateTensor)
+
+    # Create initial states from zero states. Results in variable states that can be saved and set.
+    def _createInitialStatesFromZero(self, cells):
         self.zeroStates = []
         for cell in cells:
             layerStates = cell.zero_state(self.batchSize, dtype=tf.float32)
@@ -235,6 +243,13 @@ class RNN(Layer):
         for cellStates in self.zeroStates:
             layerStates = [tf.Variable(layerState, trainable=False) for layerState in cellStates]
             self.initialStates.append(tuple(layerStates))
+
+    # Create initial states from tensor. Useful for making decoders. Results in non-variable state.
+    # tensor must have shape [batchSize, nNodes]. It will be copied to each cell layer.
+    def _createInitialStatesFromTensor(self, tensor):
+        self.initialStates = []
+        for cell in cells:
+            self.initialStates.append(tuple(nLayers*[tensor]))
 
     # Sets up ops for resetting the initial state to zero or placeholder values
     def _createInitialStateResetOps(self, initialStates):
@@ -273,8 +288,9 @@ class RNN(Layer):
 
     def buildGraph(self):
         self._createCells()
-        self._createInitialStates(self.cells)
-        self._createInitialStateResetOps(self.initialStates)
+        self._createInitialStates()
+        if self.initialStateTensor is None:
+            self._createInitialStateResetOps(self.initialStates)
 
         # Assumption that data has rank-2 on the way in, reshape to get a batch of sequences
         sequence = \
@@ -301,6 +317,10 @@ class RNN(Layer):
         return flatStates
 
     def resetHiddenLayer(self, sess, newStates=None):
+        # If initial state is an external tensor it is not a Variable and can't be set. (It could be
+        # a Variable but this class is not setup to handle that and it would be weird anyway)
+        assert self.initialStateTensor is None
+
         if newStates is None:
             sess.run(self._setZeroState)
         else:
@@ -314,7 +334,7 @@ class RNN(Layer):
 class BasicGRU(RNN):
 
     def __init__(self, inLayer, nNodes, nLayers, maxSeqLen, sequenceLengths=None, batchSize=1,
-        keepProb=1.0, saveState=True, activationsAreFinalState=False):
+        keepProb=1.0, saveState=True, activationsAreFinalState=False, initialStateTensor=None):
 
         self._numCells = 1
 
@@ -326,7 +346,9 @@ class BasicGRU(RNN):
                            batchSize                = batchSize,
                            keepProb                 = keepProb,
                            saveState                = saveState,
-                           activationsAreFinalState = activationsAreFinalState)
+                           activationsAreFinalState = activationsAreFinalState,
+                           initialStateTensor       = initialStateTensor)
+        Layer.__init__(self, [nNodes, nNodes], dropout=False)
 
     def _createCell(self):
         return tf.contrib.rnn.GRUCell(self.nNodes)
@@ -365,7 +387,7 @@ class BidirectionalGRU(RNN):
                            keepProb                 = keepProb,
                            saveState                = saveState,
                            activationsAreFinalState = activationsAreFinalState)
-
+        Layer.__init__(self, [nNodes, 2*nNodes], dropout=False)
     def _createCell(self):
         return tf.contrib.rnn.GRUCell(self.nNodes)
 
@@ -449,12 +471,12 @@ class Network:
             activationsAreFinalState=activationsAreFinalState)
 
     def basicGRU(self, nNodes, nLayers=1, maxSeqLen=10, sequenceLengths=None, batchSize=1,
-        keepProb=1.0, saveState=True, activationsAreFinalState=False):
+        keepProb=1.0, saveState=True, activationsAreFinalState=False, initialStateTensor=None):
 
         self.__addLayerWithScope__(
             BasicGRU, self.outLayer, nNodes, nLayers, maxSeqLen, sequenceLengths=sequenceLengths,
             batchSize=batchSize, keepProb=keepProb, saveState=saveState,
-            activationsAreFinalState=activationsAreFinalState)
+            activationsAreFinalState=activationsAreFinalState, initialStateTensor=None)
 
     def __addLayerWithScope__(self, layerClass, *args, **kwargs):
         with tf.variable_scope(self.scope):
