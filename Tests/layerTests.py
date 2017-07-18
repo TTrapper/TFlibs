@@ -624,17 +624,17 @@ class TestLayerOutputs(unittest.TestCase):
             # Single Layer
             nLayers = 1
             netTensorState, gruTensorState = getNetwork(
-                nLayers=1, reuse=False, scopeName="oneLayer", externalState=externalState)
+                nLayers=nLayers, reuse=False, scopeName="oneLayer", externalState=externalState)
             netVarState, gruVarState = getNetwork(
-                nLayers=1, reuse=True, scopeName="oneLayer", externalState=None)
+                nLayers=nLayers, reuse=True, scopeName="oneLayer", externalState=None)
             doTests()
 
             # Multi-Layer
             nLayers = 3
             netTensorState, gruTensorState = getNetwork(
-                nLayers=2, reuse=False, scopeName="multiLayer", externalState=externalState)
+                nLayers=nLayers, reuse=False, scopeName="multiLayer", externalState=externalState)
             netVarState, gruVarState = getNetwork(
-                nLayers=2, reuse=True, scopeName="multiLayer", externalState=None)
+                nLayers=nLayers, reuse=True, scopeName="multiLayer", externalState=None)
             doTests()
 
 
