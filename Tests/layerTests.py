@@ -585,6 +585,59 @@ class TestLayerOutputs(unittest.TestCase):
             netDrop, gruDrop = getNetwork(nLayers, keepProb=0.5, reuse=True, scopeName="multiLayer")
             doTests()
 
+    def test_GRUBasic_externalInitialStateTensor(self):
+        nNodes = 5
+        nIn = 12
+        seqLen = 4
+        batchSize = 2
+
+        def getNetwork(nLayers, reuse, scopeName, externalState):
+            net = nc.Network(scopeName, reuse)
+            net.inputLayer(nIn)
+            net.basicGRU(nNodes, nLayers=nLayers, maxSeqLen=seqLen,
+                batchSize=batchSize, saveState=False, initialStateTensor=externalState)
+            net.buildGraph()
+            gru = net.outLayer
+
+            sess.run(tf.global_variables_initializer())
+            return net, gru
+
+        def doTests():
+            outTensorState= netTensorState.forward(sess, inputs, sequenceLengths=seqLen)
+            outVarState = netVarState.forward(sess, inputs, sequenceLengths=seqLen)
+
+            # Very basic test to at least make sure that external state produces different output
+            self.assertTrue(outTensorState.tolist() != outVarState.tolist())
+
+            # Manually set the Variable state GRU to the same initial value as the Tensor state
+            gruVarState.resetHiddenLayer(sess,
+                gruVarState.makeAsInitialStateList(sess.run(externalState)))
+            # Outputs should now be equal
+            outVarState = netVarState.forward(sess, inputs, sequenceLengths=seqLen)
+            self.assertEqual(outTensorState.tolist(), outVarState.tolist())
+
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+            inputs = np.random.rand(seqLen*batchSize, nIn)
+            externalState = tf.constant(np.random.rand(batchSize, nNodes), dtype=tf.float32)
+
+            # Single Layer
+            nLayers = 1
+            netTensorState, gruTensorState = getNetwork(
+                nLayers=1, reuse=False, scopeName="oneLayer", externalState=externalState)
+            netVarState, gruVarState = getNetwork(
+                nLayers=1, reuse=True, scopeName="oneLayer", externalState=None)
+            doTests()
+
+            # Multi-Layer
+            nLayers = 3
+            netTensorState, gruTensorState = getNetwork(
+                nLayers=2, reuse=False, scopeName="multiLayer", externalState=externalState)
+            netVarState, gruVarState = getNetwork(
+                nLayers=2, reuse=True, scopeName="multiLayer", externalState=None)
+            doTests()
+
+
     def test_concatLayer(self):
         tf.reset_default_graph()
         with tf.Session() as sess:

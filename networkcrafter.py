@@ -247,9 +247,7 @@ class RNN(Layer):
     # Create initial states from tensor. Useful for making decoders. Results in non-variable state.
     # tensor must have shape [batchSize, nNodes]. It will be copied to each cell layer.
     def _createInitialStatesFromTensor(self, tensor):
-        self.initialStates = []
-        for cell in cells:
-            self.initialStates.append(tuple(nLayers*[tensor]))
+        self.initialStates = self.makeAsInitialStateList(tensor)
 
     # Sets up ops for resetting the initial state to zero or placeholder values
     def _createInitialStateResetOps(self, initialStates):
@@ -315,6 +313,13 @@ class RNN(Layer):
         for cell in states:
             flatStates.extend([layerState for layerState in cell])
         return flatStates
+
+    # Wrap value into a list of tuples that matches the structure of initial states
+    def makeAsInitialStateList(self, value):
+        result = []
+        for cell in self.cells:
+            result.append(tuple([value for l in range(self.nLayers)]))
+        return result
 
     def resetHiddenLayer(self, sess, newStates=None):
         # If initial state is an external tensor it is not a Variable and can't be set. (It could be
@@ -476,7 +481,7 @@ class Network:
         self.__addLayerWithScope__(
             BasicGRU, self.outLayer, nNodes, nLayers, maxSeqLen, sequenceLengths=sequenceLengths,
             batchSize=batchSize, keepProb=keepProb, saveState=saveState,
-            activationsAreFinalState=activationsAreFinalState, initialStateTensor=None)
+            activationsAreFinalState=activationsAreFinalState, initialStateTensor=initialStateTensor)
 
     def __addLayerWithScope__(self, layerClass, *args, **kwargs):
         with tf.variable_scope(self.scope):
