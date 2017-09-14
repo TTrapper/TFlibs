@@ -46,6 +46,23 @@ class TestLayerGraphBuild(unittest.TestCase):
 
     def test_base_layer_build(self):
         tf.reset_default_graph()
+
+        def dropoutIsWithinTolerance(keepProb):
+            shape = [100, 100]
+            fivePercentTolerance = shape[0] * shape[1] * 0.05
+            numExpected = keepProb * shape[0] * shape[1]
+            # Layer with float dropout (keepProb),  no activation
+            layer = nc.Layer(shape, dropout=keepProb)
+            layer.buildGraph(tf.ones(shape=shape))
+            outputs = sess.run(layer.activations)
+            if keepProb == 1:
+                # no tolerance
+                self.assertEqual(np.sum(outputs), shape[0]*shape[1])
+            else:
+                # Dropout rate is within 5% of the expected.
+                numKept = np.sum(np.where(outputs == 0, 0, 1))
+                self.assertTrue(abs(numKept-numExpected) < fivePercentTolerance)
+
         with tf.Session() as sess:
             shape = [2, 4]
             # Layer with no dropout, with activation
@@ -63,8 +80,9 @@ class TestLayerGraphBuild(unittest.TestCase):
             layer.buildGraph(tf.constant(np.ones(shape)*5, dtype=tf.float32))
             self.assertEqual(sess.run(layer.activations).tolist(), (np.ones(shape)*5).tolist())
 
+            # Layer with boolean dropout (placeholder keepProb), no activation
             shape = [100, 100]
-            # Layer with dropout, no activation
+            fivePercentTolerance = shape[0] * shape[1] * 0.05
             layer = nc.Layer(shape, dropout=True)
             layer.buildGraph(tf.ones(shape=shape))
             self.assertTrue(isinstance(layer.keepProb, tf.Tensor))
@@ -74,7 +92,12 @@ class TestLayerGraphBuild(unittest.TestCase):
             numKept = np.sum(np.where(outputs == 0, 0, 1))
             numExpected =  (shape[0]*shape[1])*0.5
             # Dropout removed 45% to 55% of the nodes.
-            self.assertTrue(abs(numKept-numExpected) < 500)
+            self.assertTrue(abs(numKept-numExpected) < fivePercentTolerance)
+
+            # Float dropout value (actually keepProb)
+            dropoutIsWithinTolerance(1.0)
+            dropoutIsWithinTolerance(0.2)
+            dropoutIsWithinTolerance(0.8)
 
 
 class TestLayerOutputs(unittest.TestCase):

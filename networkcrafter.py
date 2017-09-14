@@ -21,9 +21,18 @@ class Layer(object):
             raise TypeError("A layer's activations must be of type TensorFlow.Tensor. Got: " + \
                 str(type(self.activations)))
 
-        if self.applyDropout is True:
-            self.keepProb = tf.placeholder(tf.float32, name="keepProb")
-            self.activations = tf.nn.dropout(self.activations, self.keepProb)
+        if isinstance(self.applyDropout, bool):
+            if self.applyDropout:
+                self.keepProb = tf.placeholder(tf.float32, name="keepProb")
+                self.activations = tf.nn.dropout(self.activations, self.keepProb)
+        elif isinstance(self.applyDropout, float):
+            if (self.applyDropout < 0 or self.applyDropout > 1):
+                raise ValueError('applyDropout must be in range [0, 1]. Got: ' + \
+                    str(self.applyDropouts))
+            self.activations = tf.nn.dropout(self.activations, self.applyDropout)
+        else:
+            raise TypeError('applyDropout must be an instance of bool or float. Got: ' + \
+                str(type(self.applyDropout)))
 
 class InputLayer(Layer):
 
@@ -559,8 +568,7 @@ class Network:
 
         # Add keepProb to layers with dropout. Add sequence info to recurrent layers.
         for layer in self.layers:
-            if layer.applyDropout:
-
+            if isinstance(layer.applyDropout, bool) and layer.applyDropout is True:
                 feedDict[layer.keepProb] = keepProb
             if isinstance(layer, RNN):
                 if sequenceLengths is not None:
