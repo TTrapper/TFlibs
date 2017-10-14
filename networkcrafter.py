@@ -68,8 +68,8 @@ class EmbeddingLayer(Layer):
         Layer.__init__(self, shape=[numEmbeddings, embeddingDim], dropout=dropout)
 
         self.embeddings = tf.get_variable("embeddings", self.shape, trainable=trainable)
-        # Adding a zero embedding to be used when the lookup needs padded vals.
-        # Should use SparseTensors and embedding_lookup_sparse but they are not compatible with fp16
+        # Adding a zero embedding to be used when the lookup needs padded vals. Alternatively,
+        # use a SparseTensor lookup, which may be incompatible with fp16.
         self.embeddings = tf.concat([self.embeddings, tf.zeros([1, embeddingDim])], axis=0)
         if lookupTensor is not None:
             self.inputs = lookupTensor
@@ -77,7 +77,13 @@ class EmbeddingLayer(Layer):
             self.inputs = tf.placeholder(dtype=tf.int32, shape=[None], name="idPlaceholder")
 
     def buildGraph(self):
-        activations = tf.nn.embedding_lookup(self.embeddings, self.inputs)
+        if isinstance(self.inputs, tf.Tensor):
+            activations = tf.nn.embedding_lookup(self.embeddings, self.inputs)
+        elif isinstance(self.inputs, tf.SparseTensor):
+            activations = tf.nn.embedding_lookup_sparse(self.embeddings, self.inputs, None)
+        else:
+            raise TypeError("Expect type Tensor or SparseTensor for EmbeddingLayer lookup, got: "\
+                + str(type(self.inputs)))
         Layer.buildGraph(self, activations)
 
 
