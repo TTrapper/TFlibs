@@ -12,9 +12,9 @@ def computeLogitsFromSampledEmbeddings(trueEmbeddings, sampledEmbeddings, trueLa
     # inputs: [batch, inDim]    sampledEmbeddings: [numSampled, inDim]
     #   sampledLogits: [batch, numSampled]
     sampledLogits = tf.matmul(inputs, sampledEmbeddings, transpose_b=True)
-
     # true logits are dot product of each input in the batch with its corresponding target embedding
     #   trueLogits: [batch, 1]
-    trueLogits = tf.reduce_sum(tf.multiply(inputs, trueEmbeddings), axis=1)
+    trueLogits = tf.reduce_sum(tf.multiply(inputs, trueEmbeddings), axis=1, keep_dims=True)
     outLogits = tf.concat([trueLogits, sampledLogits], 1)
+
     return outLogits
