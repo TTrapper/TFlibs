@@ -68,9 +68,8 @@ class EmbeddingLayer(Layer):
         Layer.__init__(self, shape=[numEmbeddings, embeddingDim], dropout=dropout)
 
         self.embeddings = tf.get_variable("embeddings", self.shape, trainable=trainable)
-        # Adding a zero embedding to be used when the lookup needs padded vals. Alternatively,
-        # use a SparseTensor lookup, which may be incompatible with fp16.
-        self.embeddings = tf.concat([self.embeddings, tf.zeros([1, embeddingDim])], axis=0)
+        self.embeddings = tf.concat([
+            self.embeddings, tf.zeros(shape=[1, embeddingDim], dtype=tf.float32)], axis=0)
         if lookupTensor is not None:
             self.inputs = lookupTensor
         else:
@@ -80,7 +79,7 @@ class EmbeddingLayer(Layer):
         if isinstance(self.inputs, tf.Tensor):
             activations = tf.nn.embedding_lookup(self.embeddings, self.inputs)
         elif isinstance(self.inputs, tf.SparseTensor):
-            activations = tf.nn.embedding_lookup_sparse(self.embeddings, self.inputs, None)
+           activations = tf.nn.embedding_lookup_sparse(self.embeddings, self.inputs, None, combiner="mean")
         else:
             raise TypeError("Expect type Tensor or SparseTensor for EmbeddingLayer lookup, got: "\
                 + str(type(self.inputs)))
@@ -117,14 +116,15 @@ class FullConnectLayer(Layer):
 
 class ConcatLayer(Layer):
 
-    def __init__(self, inLayer, concatTensor, concatTensorLen, dropout=False):
+    def __init__(self, inLayer, concatTensor, concatTensorLen, axis=1, dropout=False):
         self.inLayer = inLayer
         self.concatTensor = concatTensor
+        self.axis = axis
         shape = [inLayer.shape[-1] + concatTensorLen]
         Layer.__init__(self, shape, dropout=dropout)
 
     def buildGraph(self):
-        activations = tf.concat(axis=1, values=[self.inLayer.activations, self.concatTensor])
+        activations = tf.concat(axis=self.axis, values=[self.inLayer.activations, self.concatTensor])
         Layer.buildGraph(self, activations)
 
 class AdditionLayer(Layer):
@@ -378,7 +378,6 @@ class BasicGRU(RNN):
 
     def _unroller(self, sequences):
         cell = self.cells[0]
-
         # TF expects a tuple if multilayer and a tensor if single layer
         initialState = self.initialStates[0] if self.nLayers > 1 else self.initialStates[0][0]
         # Create outputs and state graph
@@ -463,9 +462,9 @@ class Network:
         self.__addLayerWithScope__(FullConnectLayer, self.outLayer, nNodes, activationFunction,
                 dropout, addBias, wTranspose)
 
-    def concatLayer(self, concatTensor, concatTensorLen, dropout=False):
+    def concatLayer(self, concatTensor, concatTensorLen, axis=1, dropout=False):
         self.__addLayerWithScope__(
-            ConcatLayer, self.outLayer, concatTensor, concatTensorLen, dropout)
+            ConcatLayer, self.outLayer, concatTensor, concatTensorLen, axis, dropout)
 
     def additionLayer(self, addTensor, dropout=False):
         self.__addLayerWithScope__(AdditionLayer, self.outLayer, addTensor, dropout)
