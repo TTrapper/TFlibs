@@ -1,13 +1,22 @@
 import numpy as np
 import tensorflow as tf
 
+# Wrapper for doing trainable layer norm. Not applied to 0th dim (batch).
+def layerNorm(inputs):
+    return tf.contrib.layers.layer_norm(inputs,
+                                        center=True,
+                                        scale=True,
+                                        trainable=True,
+                                        begin_norm_axis=1,
+                                        begin_params_axis=-1)
 class Layer(object):
 
-    def __init__(self, shape, activationFunction=None, dropout=False):
+    def __init__(self, shape, activationFunction=None, dropout=False, doLayerNorm=False):
 
         self.activationFunction = activationFunction
         self.shape = shape
         self.applyDropout = dropout
+        self.doLayerNorm = doLayerNorm
 
     def buildGraph(self, weightedInputs):
         # Apply activation function
@@ -21,6 +30,9 @@ class Layer(object):
             raise TypeError("A layer's activations must be of type TensorFlow.Tensor. Got: " + \
                 str(type(self.activations)))
 
+        if self.doLayerNorm:
+            self.activations = layerNorm(self.activations)
+
         if isinstance(self.applyDropout, bool):
             if self.applyDropout:
                 self.keepProb = tf.placeholder(tf.float32, name="keepProb")
@@ -33,6 +45,7 @@ class Layer(object):
         else:
             raise TypeError('applyDropout must be an instance of bool or float. Got: ' + \
                 str(type(self.applyDropout)))
+
 
 class InputLayer(Layer):
 
@@ -89,7 +102,7 @@ class EmbeddingLayer(Layer):
 class FullConnectLayer(Layer):
 
     def __init__(self, inLayer, nNodes, activationFunction, dropout=False, addBias=True,
-        wTranspose=False):
+        wTranspose=False, doLayerNorm=False):
 
         self.inLayer = inLayer
         self.nNodes = nNodes
@@ -99,7 +112,7 @@ class FullConnectLayer(Layer):
 
         self.weights, self.biases = self.initWeights(shape)
 
-        Layer.__init__(self, shape, activationFunction, dropout=dropout)
+        Layer.__init__(self, shape, activationFunction, dropout=dropout, doLayerNorm=doLayerNorm)
 
     def initWeights(self, shape):
         weights = tf.get_variable("weights", shape)
@@ -458,9 +471,9 @@ class Network:
                 self.targetVals = self.targets.activations
 
     def fullConnectLayer(self,  nNodes, activationFunction, dropout=False, addBias=True,
-        wTranspose=False):
+        wTranspose=False, doLayerNorm=False):
         self.__addLayerWithScope__(FullConnectLayer, self.outLayer, nNodes, activationFunction,
-                dropout, addBias, wTranspose)
+                dropout, addBias, wTranspose, doLayerNorm)
 
     def concatLayer(self, concatTensor, concatTensorLen, axis=1, dropout=False):
         self.__addLayerWithScope__(
